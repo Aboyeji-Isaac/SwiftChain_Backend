@@ -6,7 +6,7 @@ import app from '../src/app';
 import User from '../src/models/User';
 import Escrow, { EscrowStatus } from '../src/models/Escrow';
 import { UserRole, UserStatus } from '../src/interfaces/IUser';
-import { scanForExpiredEscrows } from '../src/services/escrowService';
+import { escrowService } from '../src/services/escrow.service';
 
 // ─── Module mocks ──────────────────────────────────────────────────────────────
 
@@ -52,10 +52,10 @@ afterAll(async () => {
 
 // ─── Helpers ───────────────────────────────────────────────────────────────────
 
-const JWT_SECRET = 'test-secret-key';
+const JWT_SECRET = 'test-secret-key-16chars';
 
 const signToken = (userId: string): string =>
-  jwt.sign({ id: userId }, JWT_SECRET, { expiresIn: '1h' });
+  jwt.sign({ userId }, JWT_SECRET, { expiresIn: '1h' });
 
 const createUser = async (
   overrides: Partial<{ role: UserRole; status: UserStatus }> = {},
@@ -73,10 +73,11 @@ const createUser = async (
 /** Creates an escrow record with a lock period that has already expired. */
 const createExpiredEscrow = async (overrides: Partial<{ amount: number }> = {}) => {
   return Escrow.create({
-    deliveryId: new mongoose.Types.ObjectId().toString(),
+    delivery: new mongoose.Types.ObjectId(),
     amount: overrides.amount ?? 100,
+    assetCode: 'XLM',
     lockedAt: new Date(Date.now() - 10 * 60 * 1000),
-    ttlSeconds: 60,
+    expiresAt: new Date(Date.now() - 60 * 1000),
     status: EscrowStatus.LOCKED,
   });
 };
@@ -84,10 +85,11 @@ const createExpiredEscrow = async (overrides: Partial<{ amount: number }> = {}) 
 /** Creates an escrow record whose TTL has not yet elapsed. */
 const createActiveEscrow = async () => {
   return Escrow.create({
-    deliveryId: new mongoose.Types.ObjectId().toString(),
+    delivery: new mongoose.Types.ObjectId(),
     amount: 100,
+    assetCode: 'XLM',
     lockedAt: new Date(),
-    ttlSeconds: 3600,
+    expiresAt: new Date(Date.now() + 3600 * 1000),
     status: EscrowStatus.LOCKED,
   });
 };
@@ -99,7 +101,7 @@ describe('scanForExpiredEscrows', () => {
     const expired = await createExpiredEscrow();
     const active = await createActiveEscrow();
 
-    const result = await scanForExpiredEscrows();
+    const result = await escrowService.scanForExpiredEscrows();
 
     expect(result.flaggedCount).toBe(1);
 
@@ -115,7 +117,7 @@ describe('scanForExpiredEscrows', () => {
   it('is a no-op when no escrows have expired', async () => {
     await createActiveEscrow();
 
-    const result = await scanForExpiredEscrows();
+    const result = await escrowService.scanForExpiredEscrows();
 
     expect(result.flaggedCount).toBe(0);
     expect(result.flaggedEscrows).toHaveLength(0);
@@ -123,9 +125,9 @@ describe('scanForExpiredEscrows', () => {
 
   it('does not re-flag escrows that are already expired', async () => {
     const expired = await createExpiredEscrow();
-    await scanForExpiredEscrows();
+    await escrowService.scanForExpiredEscrows();
 
-    const result = await scanForExpiredEscrows();
+    const result = await escrowService.scanForExpiredEscrows();
 
     expect(result.flaggedCount).toBe(0);
     const refreshed = await Escrow.findById(expired._id);
@@ -140,7 +142,7 @@ describe('GET /api/v1/admin/escrows/flagged', () => {
     process.env.JWT_SECRET = JWT_SECRET;
 
     await createExpiredEscrow();
-    await scanForExpiredEscrows();
+    await escrowService.scanForExpiredEscrows();
 
     const admin = await createUser({ role: UserRole.ADMIN });
     const token = signToken(admin._id.toString());
@@ -197,7 +199,7 @@ describe('PATCH /api/v1/admin/escrows/:id/resolve', () => {
     process.env.JWT_SECRET = JWT_SECRET;
 
     const expired = await createExpiredEscrow();
-    await scanForExpiredEscrows();
+    await escrowService.scanForExpiredEscrows();
 
     const admin = await createUser({ role: UserRole.ADMIN });
     const token = signToken(admin._id.toString());
@@ -219,7 +221,7 @@ describe('PATCH /api/v1/admin/escrows/:id/resolve', () => {
     process.env.JWT_SECRET = JWT_SECRET;
 
     const expired = await createExpiredEscrow();
-    await scanForExpiredEscrows();
+    await escrowService.scanForExpiredEscrows();
 
     const admin = await createUser({ role: UserRole.ADMIN });
     const token = signToken(admin._id.toString());

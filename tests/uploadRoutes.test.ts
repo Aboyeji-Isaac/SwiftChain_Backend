@@ -53,7 +53,7 @@ afterAll(async () => {
   await fs.rm(tempDir, { recursive: true, force: true });
 }, 15_000);
 
-const JWT_SECRET = 'test-secret-key';
+const JWT_SECRET = 'test-secret-key-16chars';
 
 const signToken = (userId: string): string =>
   jwt.sign({ id: userId }, JWT_SECRET, { expiresIn: '1h' });

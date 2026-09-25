@@ -44,7 +44,7 @@ afterAll(async () => {
 
 // ─── Helpers ───────────────────────────────────────────────────────────────────
 
-const JWT_SECRET = 'test-secret-key';
+const JWT_SECRET = 'test-secret-key-16chars';
 
 /** Mint a signed JWT for the given user id. */
 const signToken = (userId: string): string =>

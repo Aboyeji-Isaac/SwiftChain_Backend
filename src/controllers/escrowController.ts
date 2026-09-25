@@ -1,6 +1,6 @@
 import { Request, Response, NextFunction } from 'express';
 import { StatusCodes } from 'http-status-codes';
-import { getFlaggedEscrows, resolveEscrow } from '../services/escrowService';
+import { escrowService } from '../services/escrow.service';
 import type { IUser } from '../interfaces/IUser';
 import AppError from '../utils/AppError';
 import { sendSuccess } from '../utils/responseWrapper';
@@ -31,7 +31,7 @@ export const listFlaggedEscrows = async (
       throw new AppError('"limit" must be a positive integer.', StatusCodes.BAD_REQUEST);
     }
 
-    const result = await getFlaggedEscrows({ page, limit });
+    const result = await escrowService.getFlaggedEscrows({ page, limit });
 
     sendSuccess(res, result, 'Flagged escrows retrieved successfully', StatusCodes.OK);
   } catch (error) {
@@ -72,7 +72,7 @@ export const resolveFlaggedEscrow = async (
       );
     }
 
-    const escrow = await resolveEscrow({
+    const escrow = await escrowService.resolveEscrow({
       escrowId: req.params.id,
       adminId: adminUser._id.toString(),
       notes: notes.trim(),

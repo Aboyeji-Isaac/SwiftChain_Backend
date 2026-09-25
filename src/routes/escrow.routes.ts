@@ -3,6 +3,7 @@ import { escrowController } from '../controllers/escrow.controller';
 import { validateRequest } from '../middlewares/validateRequest';
 import { requireIdempotencyKey } from '../middlewares/idempotency';
 import { fundEscrowBodySchema } from '../validators/escrowValidator';
+import authenticate from '../middleware/authenticate';
 
 /**
  * Escrow routes.
@@ -86,6 +87,10 @@ router.post(
   validateRequest({ body: fundEscrowBodySchema }),
   escrowController.fund.bind(escrowController),
 );
+
+// All escrow endpoints require a valid JWT — escrow records and fund/release
+// operations must never be reachable without authentication.
+router.use(authenticate);
 
 router.get('/delivery/:deliveryId', escrowController.getByDelivery.bind(escrowController));
 router.get('/contract/:contractId', escrowController.getByContract.bind(escrowController));

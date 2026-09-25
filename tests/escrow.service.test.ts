@@ -8,7 +8,7 @@
 import mongoose, { Types } from 'mongoose';
 import { MongoMemoryServer } from 'mongodb-memory-server';
 import { EscrowService } from '../src/services/escrow.service';
-import Escrow, { EscrowLockStatus } from '../src/models/Escrow';
+import Escrow, { EscrowStatus } from '../src/models/Escrow';
 import Delivery, { DeliveryStatus } from '../src/models/Delivery';
 
 jest.mock('../src/config/logger', () => ({
@@ -80,9 +80,9 @@ describe('EscrowService', () => {
         ledger: 10,
       });
 
-      expect(escrow.lockStatus).toBe(EscrowLockStatus.LOCKED);
+      expect(escrow.status).toBe(EscrowStatus.LOCKED);
       expect(escrow.amount).toBe(500);
-      expect(escrow.fundedBy).toBe('GFUNDER');
+      expect(escrow.payerAddress).toBe('GFUNDER');
       expect(escrow.transactions).toHaveLength(1);
 
       const updated = await Delivery.findById(delivery.id);

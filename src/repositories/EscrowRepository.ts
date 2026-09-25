@@ -1,5 +1,5 @@
 import { Types } from 'mongoose';
-import Escrow, { EscrowLockStatus, IEscrow, IEscrowTransaction } from '../models/Escrow';
+import Escrow, { EscrowStatus, IEscrow, IEscrowTransaction } from '../models/Escrow';
 import { BaseRepository } from './BaseRepository';
 import { ReadOptions, WriteOptions } from './types';
 
@@ -34,12 +34,9 @@ export class EscrowRepository extends BaseRepository<IEscrow> {
     return this.findOne({ contractId }, options);
   }
 
-  /** All escrows currently in a given lock state. */
-  async findByLockStatus(
-    lockStatus: EscrowLockStatus,
-    options?: ReadOptions<IEscrow>,
-  ): Promise<IEscrow[]> {
-    return this.find({ lockStatus }, options);
+  /** All escrows currently in a given lifecycle state. */
+  async findByStatus(status: EscrowStatus, options?: ReadOptions<IEscrow>): Promise<IEscrow[]> {
+    return this.find({ status }, options);
   }
 
   /**
@@ -68,25 +65,25 @@ export class EscrowRepository extends BaseRepository<IEscrow> {
   }
 
   /**
-   * Move an escrow between lock states, asserting the prior state.
+   * Move an escrow between lifecycle states, asserting the prior state.
    *
    * @param expectedFrom - States the escrow may legally be in for this move.
    * @param timestampField - Lifecycle timestamp to stamp with the current time.
    * @returns The updated escrow, or `null` if it was not in `expectedFrom`.
    */
-  async transitionLockStatus(
+  async transitionStatus(
     id: string,
-    expectedFrom: EscrowLockStatus[],
-    to: EscrowLockStatus,
-    timestampField?: 'lockedAt' | 'releasedAt' | 'refundedAt',
+    expectedFrom: EscrowStatus[],
+    to: EscrowStatus,
+    timestampField?: 'lockedAt' | 'releasedAt' | 'refundedAt' | 'flaggedAt' | 'resolvedAt',
     options?: WriteOptions,
   ): Promise<IEscrow | null> {
     if (!this.isValidId(id)) return null;
 
-    const set: Record<string, unknown> = { lockStatus: to };
+    const set: Record<string, unknown> = { status: to };
     if (timestampField) set[timestampField] = new Date();
 
-    return this.updateOne({ _id: id, lockStatus: { $in: expectedFrom } }, { $set: set }, options);
+    return this.updateOne({ _id: id, status: { $in: expectedFrom } }, { $set: set }, options);
   }
 }
 

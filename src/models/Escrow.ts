@@ -8,6 +8,10 @@ export enum EscrowStatus {
   RELEASED = 'released',
   REFUNDED = 'refunded',
   DISPUTED = 'disputed',
+  /** Lock TTL elapsed without resolution — flagged for admin review. */
+  EXPIRED = 'expired',
+  /** An admin closed out an expired escrow. */
+  RESOLVED = 'resolved',
 }
 
 /** Alias for lock status – kept for backward compatibility. */
@@ -29,6 +33,7 @@ const FUNDS_HELD_STATUSES: ReadonlySet<EscrowStatus> = new Set([
 const TERMINAL_STATUSES: ReadonlySet<EscrowStatus> = new Set([
   EscrowStatus.RELEASED,
   EscrowStatus.REFUNDED,
+  EscrowStatus.RESOLVED,
 ]);
 
 /** The kind of on‑chain operation a recorded transaction hash represents. */
@@ -71,6 +76,19 @@ export interface IEscrow extends Document {
   lastSyncedLedger?: number;
   /** Reason recorded when the escrow moved to `disputed`. */
   disputeReason?: string;
+  /** Expiry, flagging and resolution audit fields for the escrow lifecycle. */
+  /** Absolute point in time after which the lock is considered stale. */
+  expiresAt?: Date;
+  /** When the expiry scan flagged the escrow. */
+  flaggedAt?: Date;
+  /** Soroban ledger sequence at which the expiry was detected (audit trail). */
+  flaggedLedger?: number;
+  /** When an admin resolved the expired escrow. */
+  resolvedAt?: Date;
+  /** Admin who resolved the expired escrow. */
+  resolvedBy?: string;
+  /** Admin-provided audit note describing the resolution. */
+  resolutionNotes?: string;
   /** Timestamp fields provided by Mongoose. */
   createdAt: Date;
   updatedAt: Date;
@@ -110,6 +128,12 @@ const EscrowSchema = new Schema<IEscrow>(
     refundedAt: { type: Date },
     lastSyncedLedger: { type: Number, min: 0 },
     disputeReason: { type: String, trim: true },
+    expiresAt: { type: Date, index: true },
+    flaggedAt: { type: Date },
+    flaggedLedger: { type: Number, min: 0 },
+    resolvedAt: { type: Date },
+    resolvedBy: { type: String, trim: true },
+    resolutionNotes: { type: String, trim: true },
     transactions: { type: [EscrowTransactionSchema], default: [] },
   },
   {

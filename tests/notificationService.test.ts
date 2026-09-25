@@ -207,6 +207,42 @@ describe('NotificationService', () => {
       expect(newOwner?.devices).toHaveLength(1);
     });
 
+    it('does not detach a token that is already owned by the requesting user', async () => {
+      await service.registerDevice({ userId, token: 'token-1', platform: 'android' });
+
+      // A concurrent registration for another user must not steal a token
+      // that the current owner is re-registering at the same time.
+      const otherUserId = new Types.ObjectId().toHexString();
+      await service.registerDevice({ userId, token: 'token-1', platform: 'android' });
+      await service.registerDevice({ userId: otherUserId, token: 'token-1', platform: 'ios' });
+
+      const newOwner = await NotificationPreference.findOne({ user: otherUserId });
+      expect(newOwner?.devices).toHaveLength(1);
+
+      const oldOwner = await NotificationPreference.findOne({ user: userId });
+      expect(oldOwner?.devices).toHaveLength(0);
+    });
+
+    it('leaves exactly one owner when two users register the same token concurrently', async () => {
+      const userA = new Types.ObjectId().toHexString();
+      const userB = new Types.ObjectId().toHexString();
+      const token = 'race-token';
+
+      await Promise.all([
+        service.registerDevice({ userId: userA, token, platform: 'ios' }),
+        service.registerDevice({ userId: userB, token, platform: 'ios' }),
+      ]);
+
+      // The token must survive under exactly one user — never duplicated
+      // onto both and never dropped from both.
+      const owners = await NotificationPreference.find({ 'devices.token': token });
+      expect(owners).toHaveLength(1);
+
+      const [owner] = owners;
+      expect([userA, userB]).toContain(String(owner.user));
+      expect(owner.devices).toHaveLength(1);
+    });
+
     it('unregisters a device token', async () => {
       await service.registerDevice({ userId, token: 'token-1', platform: 'web' });
       const preference = await service.unregisterDevice(userId, 'token-1');

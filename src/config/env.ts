@@ -102,6 +102,8 @@ interface EnvConfig {
   SHUTDOWN_TIMEOUT_MS: number;
   /** Cron expression driving the escrow monitor job. Default: every 5 minutes */
   ESCROW_MONITOR_CRON: string;
+  /** Lock TTL (s) after which a still-locked escrow is flagged as expired. Default: 86400 (24h) */
+  ESCROW_LOCK_TTL_SECONDS: number;
 
   // ── Stellar / Soroban network ─────────────────────────────────
   /** Target Stellar network. Default: testnet */
@@ -245,6 +247,7 @@ const envSchema = z.object({
   // ── Lifecycle / jobs ──────────────────────────────────────────
   SHUTDOWN_TIMEOUT_MS: z.coerce.number().int().min(1000).default(30000),
   ESCROW_MONITOR_CRON: z.string().trim().min(1).default('*/5 * * * *'),
+  ESCROW_LOCK_TTL_SECONDS: z.coerce.number().int().min(1).default(86400),
 
   // ── Stellar / Soroban network ─────────────────────────────────
   STELLAR_NETWORK: z

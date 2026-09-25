@@ -2,7 +2,7 @@ import EventLog from '../models/EventLog';
 import Delivery from '../models/Delivery';
 import { sorobanRpcClient } from '../config/stellar';
 import logger from '../config/logger';
-import { webSocketService } from './webSocketService';
+import { emitDeliveryStatusUpdated } from '../sockets';
 export interface IndexerStatusData {
   eventType: string;
   contractId: string;
@@ -37,7 +37,7 @@ export class IndexerService {
       });
     } catch (error) {
       logger.error(`[IndexerService] Error fetching indexer status: ${
-        error instanceof Error ? eror.message : String(error)}`);
+        error instanceof Error ? error.message : String(error)}`);
       throw error;
     }
   }
@@ -45,15 +45,21 @@ export class IndexerService {
   public async processDeliveryStatusUpdated(event: DeliveryStatusUpdatedEvent): Promise<void> {
     try {
       const { contractId, deliveryId, newStatus } = event;
-      const updatedDelivery = await Delivery.findOneAndUpdate({ _id: deliveryId, contractId }, { status: newStatus }, { new: true, runValidators: true }).lean();
+      await Delivery.findOneAndUpdate({ _id: deliveryId, contractId }, { status: newStatus }, { new: true, runValidators: true }).lean();
       if (!updatedDelivery) {
         logger.warn(`[IndexerService] Delivery not found for id ${deliveryId} on contract ${contractId}`);
         return;
       }
-      await webSocketService.notifyDeliveryStatusChange(updatedDelivery);
+      // Push the transition to any connected realtime clients (no-op when the
+      // socket namespace has not been initialised, e.g. in tests).
+      emitDeliveryStatusUpdated(deliveryId, {
+        contractId,
+        deliveryId,
+        status: newStatus,
+      });
       logger.info(`[IndexerService] Delivery ${deliveryId} status updated to ${newStatus} on contract ${contractId}`);
     } catch (error) {
-      logger.error(`[IndexerSerice] Error processing delivery_status_updated event: ${
+      logger.error(`[IndexerService] Error processing delivery_status_updated event: ${
         error instanceof Error ? error.message : String(error)}`);
       throw error;
     }

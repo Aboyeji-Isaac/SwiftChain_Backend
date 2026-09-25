@@ -73,6 +73,9 @@ beforeAll(async () => {
 
   process.env.JWT_SECRET = JWT_SECRET;
   process.env.NODE_ENV = 'test';
+  // This suite performs several authenticated logins per test; raise the
+  // global /api rate limit so the limiter does not starve the suite.
+  process.env.RATE_LIMIT_MAX_REQUESTS = '10000';
 
   const mod = await import('../src/app');
   app = mod.default;
@@ -205,14 +208,12 @@ describe('Escrow Lifecycle E2E Tests', () => {
     it('escrow is created with status "locked" after funding event', async () => {
       expect(testEscrow).toBeDefined();
       expect(testEscrow._id).toBeDefined();
-      // Note: service uses 'lockStatus' field, model defines 'status'
-      expect((testEscrow as any).lockStatus || testEscrow.status).toBe(EscrowStatus.LOCKED);
+      expect(testEscrow.status).toBe(EscrowStatus.LOCKED);
     });
 
     it('escrow has correct amount and asset code', async () => {
       expect(testEscrow.amount).toBe(100);
-      // Note: service layer uses 'asset' field, but schema defines 'assetCode'
-      expect((testEscrow as any).asset || testEscrow.assetCode).toBe('XLM');
+      expect(testEscrow.assetCode).toBe('XLM');
     });
 
     it('escrow has Soroban contract ID stored', async () => {
@@ -220,8 +221,7 @@ describe('Escrow Lifecycle E2E Tests', () => {
     });
 
     it('escrow has payer address from funding event', async () => {
-      // Note: service sets 'fundedBy' field, model defines 'payerAddress'
-      expect((testEscrow as any).fundedBy || testEscrow.payerAddress).toBe('GFUNDER123456789');
+      expect(testEscrow.payerAddress).toBe('GFUNDER123456789');
     });
 
     it('escrow has fund transaction hash recorded', async () => {
@@ -264,12 +264,9 @@ describe('Escrow Lifecycle E2E Tests', () => {
         ledger: 200000,
       });
 
-      // Check against both possible field names
-      const amount1 = secondRecord.amount;
-      const asset1 = (secondRecord as any).asset || secondRecord.assetCode;
-      
-      expect(amount1).toBe(100); // Original amount preserved
-      expect(asset1).toBe('XLM'); // Original asset preserved
+      // Check the original values are preserved
+      expect(secondRecord.amount).toBe(100); // Original amount preserved
+      expect(secondRecord.assetCode).toBe('XLM'); // Original asset preserved
       expect(secondRecord.transactions).toHaveLength(1); // No duplicate tx
     });
   });
@@ -279,6 +276,14 @@ describe('Escrow Lifecycle E2E Tests', () => {
   describe('Step 2 — Release Escrow', () => {
 
     beforeEach(async () => {
+      // The global afterEach wipes every collection (including users) between
+      // tests, so the buyer/seller accounts are recreated and re-logged-in
+      // here to keep the JWTs resolvable by the auth middleware.
+      buyerUser = await createTestUser({ firstName: 'Buyer', lastName: 'User' });
+      sellerUser = await createTestUser({ firstName: 'Seller', lastName: 'User' });
+      buyerToken = await loginUser(buyerUser.email, 'SecurePass123!');
+      sellerToken = await loginUser(sellerUser.email, 'SecurePass123!');
+
       testDelivery = await createTestDelivery();
       testEscrow = await recordEscrowFunded(testDelivery);
     });
@@ -510,6 +515,11 @@ describe('Escrow Lifecycle E2E Tests', () => {
   describe('GET /api/v1/escrow/delivery/:deliveryId', () => {
 
     beforeEach(async () => {
+      buyerUser = await createTestUser({ firstName: 'Buyer', lastName: 'User' });
+      sellerUser = await createTestUser({ firstName: 'Seller', lastName: 'User' });
+      buyerToken = await loginUser(buyerUser.email, 'SecurePass123!');
+      sellerToken = await loginUser(sellerUser.email, 'SecurePass123!');
+
       testDelivery = await createTestDelivery();
       testEscrow = await recordEscrowFunded(testDelivery);
     });
@@ -555,6 +565,11 @@ describe('Escrow Lifecycle E2E Tests', () => {
   describe('GET /api/v1/escrow/contract/:contractId', () => {
 
     beforeEach(async () => {
+      buyerUser = await createTestUser({ firstName: 'Buyer', lastName: 'User' });
+      sellerUser = await createTestUser({ firstName: 'Seller', lastName: 'User' });
+      buyerToken = await loginUser(buyerUser.email, 'SecurePass123!');
+      sellerToken = await loginUser(sellerUser.email, 'SecurePass123!');
+
       testDelivery = await createTestDelivery();
       testEscrow = await recordEscrowFunded(testDelivery);
     });
@@ -566,7 +581,8 @@ describe('Escrow Lifecycle E2E Tests', () => {
 
       expect(res.status).toBe(200);
       expect(res.body.data).toBeDefined();
-      expect(res.body.data._id).toBe(testEscrow._id.toString());
+      // The escrow JSON envelope exposes `id` (the toJSON transform strips _id).
+      expect(res.body.data.id).toBe(testEscrow._id.toString());
     });
 
     it('returns 404 when no escrow exists for the contract ID', async () => {
@@ -600,17 +616,25 @@ describe('Escrow Lifecycle E2E Tests', () => {
 
     it('refund changes escrow status to "refunded"', async () => {
       // Simulate a refund operation at the service level
-      const updatedEscrow = new Escrow(refundEscrow.toObject());
-      updatedEscrow.status = EscrowStatus.REFUNDED;
-      updatedEscrow.refundTransactionHash = `txrefund-${Date.now()}`;
-      updatedEscrow.refundedAt = new Date();
-      updatedEscrow.transactions.push({
-        hash: `txrefund-${Date.now()}`,
-        type: 'refund',
-        ledger: 100002,
-        recordedAt: new Date(),
-      } as any);
-      await updatedEscrow.save();
+      const updatedEscrow = await Escrow.findByIdAndUpdate(
+        refundEscrow._id,
+        {
+          $set: {
+            status: EscrowStatus.REFUNDED,
+            refundTransactionHash: `txrefund-${Date.now()}`,
+            refundedAt: new Date(),
+          },
+          $push: {
+            transactions: {
+              hash: `txrefund-${Date.now()}`,
+              type: 'refund',
+              ledger: 100002,
+              recordedAt: new Date(),
+            },
+          },
+        },
+        { new: true },
+      );
 
       const stored = await Escrow.findById(refundEscrow._id);
       expect(stored?.status).toBe(EscrowStatus.REFUNDED);
@@ -619,17 +643,25 @@ describe('Escrow Lifecycle E2E Tests', () => {
     it('refund transaction is recorded in transactions array', async () => {
       const refundTxHash = `txrefund-${Date.now()}`;
 
-      const updatedEscrow = new Escrow(refundEscrow.toObject());
-      updatedEscrow.status = EscrowStatus.REFUNDED;
-      updatedEscrow.refundTransactionHash = refundTxHash;
-      updatedEscrow.refundedAt = new Date();
-      updatedEscrow.transactions.push({
-        hash: refundTxHash,
-        type: 'refund',
-        ledger: 100002,
-        recordedAt: new Date(),
-      } as any);
-      await updatedEscrow.save();
+      const updatedEscrow = await Escrow.findByIdAndUpdate(
+        refundEscrow._id,
+        {
+          $set: {
+            status: EscrowStatus.REFUNDED,
+            refundTransactionHash: refundTxHash,
+            refundedAt: new Date(),
+          },
+          $push: {
+            transactions: {
+              hash: refundTxHash,
+              type: 'refund',
+              ledger: 100002,
+              recordedAt: new Date(),
+            },
+          },
+        },
+        { new: true },
+      );
 
       const stored = await Escrow.findById(refundEscrow._id);
       const refundTx = stored?.transactions.find((tx) => tx.type === 'refund');
@@ -638,18 +670,20 @@ describe('Escrow Lifecycle E2E Tests', () => {
     });
 
     it('isFundsLocked returns false when refunded', async () => {
-      const updatedEscrow = new Escrow(refundEscrow.toObject());
-      updatedEscrow.status = EscrowStatus.REFUNDED;
-      await updatedEscrow.save();
+      await Escrow.findByIdAndUpdate(
+        refundEscrow._id,
+        { $set: { status: EscrowStatus.REFUNDED } },
+      );
 
       const stored = await Escrow.findById(refundEscrow._id);
       expect(stored?.isFundsLocked).toBe(false);
     });
 
     it('isSettled returns true when refunded', async () => {
-      const updatedEscrow = new Escrow(refundEscrow.toObject());
-      updatedEscrow.status = EscrowStatus.REFUNDED;
-      await updatedEscrow.save();
+      await Escrow.findByIdAndUpdate(
+        refundEscrow._id,
+        { $set: { status: EscrowStatus.REFUNDED } },
+      );
 
       const stored = await Escrow.findById(refundEscrow._id);
       expect(stored?.isSettled).toBe(true);
@@ -669,10 +703,10 @@ describe('Escrow Lifecycle E2E Tests', () => {
     });
 
     it('escrow can move to disputed status', async () => {
-      const updatedEscrow = new Escrow(disputeEscrow.toObject());
-      updatedEscrow.status = EscrowStatus.DISPUTED;
-      updatedEscrow.disputeReason = 'Delivery not received';
-      await updatedEscrow.save();
+      await Escrow.findByIdAndUpdate(
+        disputeEscrow._id,
+        { $set: { status: EscrowStatus.DISPUTED, disputeReason: 'Delivery not received' } },
+      );
 
       const stored = await Escrow.findById(disputeEscrow._id);
       expect(stored?.status).toBe(EscrowStatus.DISPUTED);
@@ -680,22 +714,36 @@ describe('Escrow Lifecycle E2E Tests', () => {
     });
 
     it('isFundsLocked returns true when disputed (funds still held)', async () => {
-      const updatedEscrow = new Escrow(disputeEscrow.toObject());
-      updatedEscrow.status = EscrowStatus.DISPUTED;
-      await updatedEscrow.save();
+      await Escrow.findByIdAndUpdate(
+        disputeEscrow._id,
+        { $set: { status: EscrowStatus.DISPUTED } },
+      );
 
       const stored = await Escrow.findById(disputeEscrow._id);
       expect(stored?.isFundsLocked).toBe(true);
     });
 
     it('isSettled returns false when disputed (not terminal)', async () => {
-      const updatedEscrow = new Escrow(disputeEscrow.toObject());
-      updatedEscrow.status = EscrowStatus.DISPUTED;
-      await updatedEscrow.save();
+      await Escrow.findByIdAndUpdate(
+        disputeEscrow._id,
+        { $set: { status: EscrowStatus.DISPUTED } },
+      );
 
       const stored = await Escrow.findById(disputeEscrow._id);
       expect(stored?.isSettled).toBe(false);
     });
+  });
+
+  // ── Shared helper for sections without their own beforeEach ──────────
+
+  let httpUserToken: string;
+
+  beforeEach(async () => {
+    // The global afterEach wipes every collection (including users) between
+    // tests, so sections that drive HTTP endpoints without per-step setup
+    // still need a fresh account and token before each test.
+    const httpUser = await createTestUser({ firstName: 'Http', lastName: 'User' });
+    httpUserToken = await loginUser(httpUser.email, 'SecurePass123!');
   });
 
   // ── STEP 7: Complete Lifecycle Flow ─────────────────────────────────
@@ -718,7 +766,7 @@ describe('Escrow Lifecycle E2E Tests', () => {
       // 2. Release escrow
       const releaseRes = await request(app)
         .post('/api/v1/escrow/release')
-        .set('Authorization', `Bearer ${buyerToken}`)
+        .set('Authorization', `Bearer ${httpUserToken}`)
         .send({
           escrowId: escrow._id.toString(),
           transactionHash: `txrelease-${Date.now()}`,
@@ -746,16 +794,23 @@ describe('Escrow Lifecycle E2E Tests', () => {
       const escrow = await recordEscrowFunded(delivery);
 
       // Add a refund transaction
-      const escrowDoc = new Escrow(escrow.toObject());
-      escrowDoc.status = EscrowStatus.REFUNDED;
-      escrowDoc.refundedAt = new Date();
-      escrowDoc.transactions.push({
-        hash: `txrefund-${Date.now()}`,
-        type: 'refund',
-        ledger: 100002,
-        recordedAt: new Date(),
-      } as any);
-      await escrowDoc.save();
+      await Escrow.findByIdAndUpdate(
+        escrow._id,
+        {
+          $set: {
+            status: EscrowStatus.REFUNDED,
+            refundedAt: new Date(),
+          },
+          $push: {
+            transactions: {
+              hash: `txrefund-${Date.now()}`,
+              type: 'refund',
+              ledger: 100002,
+              recordedAt: new Date(),
+            },
+          },
+        },
+      );
 
       const stored = await Escrow.findById(escrow._id);
       expect(stored?.transactions).toHaveLength(2);
@@ -778,7 +833,7 @@ describe('Escrow Lifecycle E2E Tests', () => {
 
       const res = await request(app)
         .post('/api/v1/escrow/release')
-        .set('Authorization', `Bearer ${buyerToken}`)
+        .set('Authorization', `Bearer ${httpUserToken}`)
         .send({
           escrowId: escrow._id.toString(),
           transactionHash: `txrelease-${Date.now()}`,
@@ -794,7 +849,7 @@ describe('Escrow Lifecycle E2E Tests', () => {
 
       const res = await request(app)
         .post('/api/v1/escrow/release')
-        .set('Authorization', `Bearer ${buyerToken}`)
+        .set('Authorization', `Bearer ${httpUserToken}`)
         .send({
           escrowId: escrow._id.toString(),
           transactionHash: `txrelease-${Date.now()}`,
@@ -851,7 +906,7 @@ describe('Escrow Lifecycle E2E Tests', () => {
 
       await request(app)
         .post('/api/v1/escrow/release')
-        .set('Authorization', `Bearer ${buyerToken}`)
+        .set('Authorization', `Bearer ${httpUserToken}`)
         .send({
           escrowId: escrow._id.toString(),
           transactionHash: `txrelease-${Date.now()}`,

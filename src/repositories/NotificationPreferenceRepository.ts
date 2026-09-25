@@ -83,47 +83,82 @@ export class NotificationPreferenceRepository extends BaseRepository<INotificati
    * app re-authenticated, so it is detached from the previous owner first.
    * Skipping that step would push one user's delivery updates to another's
    * phone.
+   *
+   * Concurrency: a unique multikey index on `devices.token` guarantees a
+   * token maps to at most one user at any instant. The claim loop relies on
+   * it: if two users race to attach the same token, the second attach fails
+   * with a duplicate-key error and retries after detaching the winner, so
+   * exactly one owner survives. It also terminates: each retry removes one
+   * competing registration before re-attaching.
    */
   async registerDevice(
     userId: string | Types.ObjectId,
     device: Omit<IDeviceToken, 'lastSeenAt'>,
   ): Promise<INotificationPreference> {
-    await this.model
-      .updateMany(
-        { user: { $ne: userId }, 'devices.token': device.token },
-        { $pull: { devices: { token: device.token } } },
-      )
-      .exec();
+    const MAX_CLAIM_ATTEMPTS = 5;
 
-    // Refresh the timestamp if this user already has the token, so an
-    // existing registration is not duplicated.
-    const refreshed = await this.model
-      .findOneAndUpdate(
-        { user: userId, 'devices.token': device.token },
-        {
-          $set: {
-            'devices.$.platform': device.platform,
-            'devices.$.lastSeenAt': new Date(),
+    for (let attempt = 0; attempt < MAX_CLAIM_ATTEMPTS; attempt += 1) {
+      // Guard: an already-registered token is refreshed in place rather than
+      // detached and re-attached, so a re-registration never races with a
+      // concurrent detach of the same token.
+      const refreshed = await this.model
+        .findOneAndUpdate(
+          { user: userId, 'devices.token': device.token },
+          {
+            $set: {
+              'devices.$.platform': device.platform,
+              'devices.$.lastSeenAt': new Date(),
+            },
           },
-        },
-        { new: true },
-      )
-      .exec();
+          { new: true },
+        )
+        .exec();
 
-    if (refreshed) return refreshed as INotificationPreference;
+      if (refreshed) return refreshed as INotificationPreference;
 
-    const updated = await this.model
-      .findOneAndUpdate(
-        { user: userId },
-        {
-          $push: { devices: { ...device, lastSeenAt: new Date() } },
-          $setOnInsert: { user: userId },
-        },
-        { new: true, upsert: true, setDefaultsOnInsert: true, runValidators: true },
-      )
-      .exec();
+      // Detach the token from every other user in a single atomic operation.
+      await this.model
+        .updateMany(
+          { user: { $ne: userId }, 'devices.token': device.token },
+          { $pull: { devices: { token: device.token } } },
+        )
+        .exec();
 
-    return updated as INotificationPreference;
+      try {
+        const updated = await this.model
+          .findOneAndUpdate(
+            { user: userId },
+            {
+              $push: { devices: { ...device, lastSeenAt: new Date() } },
+              $setOnInsert: { user: userId },
+            },
+            { new: true, upsert: true, setDefaultsOnInsert: true, runValidators: true },
+          )
+          .exec();
+
+        if (!updated) {
+          throw new Error('Failed to upsert notification preferences for user');
+        }
+
+        return updated as INotificationPreference;
+      } catch (err) {
+        // Duplicate key on `devices.token`: a parallel registration attached
+        // the token between our detach and attach. Detach again and retry —
+        // the unique index guarantees only one of the racing writes can win.
+        const isDuplicateToken =
+          typeof err === 'object' &&
+          err !== null &&
+          'code' in err &&
+          (err as { code?: number }).code === 11000;
+
+        if (!isDuplicateToken || attempt === MAX_CLAIM_ATTEMPTS - 1) {
+          throw err;
+        }
+      }
+    }
+
+    // Unreachable: the loop either returns or throws on its final attempt.
+    throw new Error('Could not register device token due to concurrent registration contention');
   }
 
   /** Remove a device token from a user (logout or manual unsubscribe). */

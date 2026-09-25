@@ -81,7 +81,11 @@ const NotificationPreferenceSchema = new Schema<INotificationPreference>(
 
 // Token registration looks up the owning preference document by raw token so a
 // device that moves between accounts can be detached from the previous owner.
-NotificationPreferenceSchema.index({ 'devices.token': 1 });
+// The index is UNIQUE (multikey over the devices array): a push token maps to
+// exactly one active account at any instant, so concurrent registrations for
+// the same token cannot both own it — the losing write fails with E11000 and
+// retries (see NotificationPreferenceRepository#registerDevice).
+NotificationPreferenceSchema.index({ 'devices.token': 1 }, { unique: true });
 
 const NotificationPreference = mongoose.model<INotificationPreference>(
   'NotificationPreference',

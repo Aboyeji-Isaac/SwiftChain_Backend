@@ -10,7 +10,7 @@ import mongoose, { Types } from 'mongoose';
 import { MongoMemoryServer } from 'mongodb-memory-server';
 import Delivery, { DeliveryStatus } from '../src/models/Delivery';
 import User from '../src/models/User';
-import Escrow, { EscrowLockStatus } from '../src/models/Escrow';
+import Escrow, { EscrowStatus } from '../src/models/Escrow';
 import { UserRole, UserStatus } from '../src/interfaces/IUser';
 import { DeliveryRepository } from '../src/repositories/DeliveryRepository';
 import { UserRepository } from '../src/repositories/UserRepository';
@@ -353,8 +353,8 @@ describe('Repository layer', () => {
         delivery: delivery._id as Types.ObjectId,
         contractId: `C${new Types.ObjectId().toHexString()}`,
         amount: 5000,
-        asset: 'USDC',
-        lockStatus: EscrowLockStatus.PENDING,
+        assetCode: 'USDC',
+        status: EscrowStatus.PENDING,
         transactions: [],
         ...overrides,
       });
@@ -383,27 +383,27 @@ describe('Repository layer', () => {
       await expect(repository.transactionHashExists('hash-unknown')).resolves.toBe(false);
     });
 
-    it('transitions lock status and stamps the lifecycle timestamp', async () => {
-      const escrow = await createEscrow({ lockStatus: EscrowLockStatus.PENDING });
+    it('transitions status and stamps the lifecycle timestamp', async () => {
+      const escrow = await createEscrow({ status: EscrowStatus.PENDING });
 
-      const locked = await repository.transitionLockStatus(
+      const locked = await repository.transitionStatus(
         String(escrow._id),
-        [EscrowLockStatus.PENDING],
-        EscrowLockStatus.LOCKED,
+        [EscrowStatus.PENDING],
+        EscrowStatus.LOCKED,
         'lockedAt',
       );
 
-      expect(locked?.lockStatus).toBe(EscrowLockStatus.LOCKED);
+      expect(locked?.status).toBe(EscrowStatus.LOCKED);
       expect(locked?.lockedAt).toBeInstanceOf(Date);
     });
 
-    it('refuses a transition from an unexpected lock status', async () => {
-      const escrow = await createEscrow({ lockStatus: EscrowLockStatus.RELEASED });
+    it('refuses a transition from an unexpected status', async () => {
+      const escrow = await createEscrow({ status: EscrowStatus.RELEASED });
 
-      const result = await repository.transitionLockStatus(
+      const result = await repository.transitionStatus(
         String(escrow._id),
-        [EscrowLockStatus.LOCKED],
-        EscrowLockStatus.RELEASED,
+        [EscrowStatus.LOCKED],
+        EscrowStatus.RELEASED,
         'releasedAt',
       );
 
@@ -411,19 +411,19 @@ describe('Repository layer', () => {
     });
 
     it('lets only one of two concurrent releases succeed', async () => {
-      const escrow = await createEscrow({ lockStatus: EscrowLockStatus.LOCKED });
+      const escrow = await createEscrow({ status: EscrowStatus.LOCKED });
 
       const [first, second] = await Promise.all([
-        repository.transitionLockStatus(
+        repository.transitionStatus(
           String(escrow._id),
-          [EscrowLockStatus.LOCKED],
-          EscrowLockStatus.RELEASED,
+          [EscrowStatus.LOCKED],
+          EscrowStatus.RELEASED,
           'releasedAt',
         ),
-        repository.transitionLockStatus(
+        repository.transitionStatus(
           String(escrow._id),
-          [EscrowLockStatus.LOCKED],
-          EscrowLockStatus.RELEASED,
+          [EscrowStatus.LOCKED],
+          EscrowStatus.RELEASED,
           'releasedAt',
         ),
       ]);
@@ -431,14 +431,14 @@ describe('Repository layer', () => {
       expect([first, second].filter((result) => result !== null)).toHaveLength(1);
     });
 
-    it('finds escrows by lock status', async () => {
-      await createEscrow({ lockStatus: EscrowLockStatus.LOCKED });
-      await createEscrow({ lockStatus: EscrowLockStatus.PENDING });
+    it('finds escrows by status', async () => {
+      await createEscrow({ status: EscrowStatus.LOCKED });
+      await createEscrow({ status: EscrowStatus.PENDING });
 
-      const locked = await repository.findByLockStatus(EscrowLockStatus.LOCKED);
+      const locked = await repository.findByStatus(EscrowStatus.LOCKED);
 
       expect(locked).toHaveLength(1);
-      expect(locked[0].lockStatus).toBe(EscrowLockStatus.LOCKED);
+      expect(locked[0].status).toBe(EscrowStatus.LOCKED);
     });
   });
 });
