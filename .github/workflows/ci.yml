@@ -48,8 +48,9 @@ jobs:
         env:
           CI: true
           MONGO_URI: mongodb://localhost:27017/swiftchain_test
-          # env.ts requires a >=16 char secret; a shorter value would exit(1)
-          JWT_SECRET: test_secret_for_ci_pipeline_16
+          # Must match tests/jest.setup.ts and the JWT_SECRET constant hardcoded
+          # in the token-signing test helpers (16-char env.ts minimum).
+          JWT_SECRET: test-secret-key-16chars
 
       - name: Upload Coverage Reports
         if: always()
