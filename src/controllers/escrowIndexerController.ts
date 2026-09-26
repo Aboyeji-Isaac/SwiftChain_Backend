@@ -8,10 +8,7 @@
 import { Request, Response, NextFunction } from 'express';
 import httpStatus from 'http-status-codes';
 import { escrowIndexerService } from '../services/escrowIndexerService';
-import {
-  syncEscrowReleasedEvents,
-  syncEscrowRefundedEvents,
-} from '../indexer/escrowHandlers';
+import { syncEscrowReleasedEvents, syncEscrowRefundedEvents } from '../indexer/escrowHandlers';
 import { AppError } from '../utils/AppError';
 import { sendSuccess } from '../utils/responseWrapper';
 import logger from '../config/logger';
@@ -75,7 +72,10 @@ export class EscrowIndexerController {
         throw new AppError('startLedger must be a non-negative integer', httpStatus.BAD_REQUEST);
       }
 
-      if (contractId !== undefined && (typeof contractId !== 'string' || contractId.trim().length === 0)) {
+      if (
+        contractId !== undefined &&
+        (typeof contractId !== 'string' || contractId.trim().length === 0)
+      ) {
         throw new AppError('contractId must be a non-empty string', httpStatus.BAD_REQUEST);
       }
 
@@ -113,7 +113,10 @@ export class EscrowIndexerController {
         throw new AppError('startLedger must be a non-negative integer', httpStatus.BAD_REQUEST);
       }
 
-      if (contractId !== undefined && (typeof contractId !== 'string' || contractId.trim().length === 0)) {
+      if (
+        contractId !== undefined &&
+        (typeof contractId !== 'string' || contractId.trim().length === 0)
+      ) {
         throw new AppError('contractId must be a non-empty string', httpStatus.BAD_REQUEST);
       }
 

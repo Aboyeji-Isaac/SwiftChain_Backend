@@ -37,7 +37,7 @@ const DlqEntrySchema: Schema = new Schema(
   },
   {
     timestamps: true,
-  }
+  },
 );
 
 export const DlqEntry = mongoose.model<IDlqEntry>('DlqEntry', DlqEntrySchema);

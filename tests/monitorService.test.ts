@@ -23,6 +23,13 @@ jest.mock('../src/blockchain/soroban.service', () => ({
   },
 }));
 
+// The stellar config pulls in the SDK's horizon axios client, which cannot be
+// constructed under jest; monitorService only reads `stellarConfig.network`.
+jest.mock('../src/config/stellar', () => ({
+  stellarConfig: { network: 'testnet' },
+  sorobanRpcClient: {},
+}));
+
 jest.mock('axios');
 
 import { sorobanService } from '../src/blockchain/soroban.service';
@@ -187,6 +194,10 @@ describe('getRecentAlerts', () => {
         networkLedger: 100,
         lagLedgers: 99,
         thresholdLedgers: 50,
+        // createdAt is immutable after insert (Mongoose timestamps), so the
+        // older timestamp must be provided at creation time to make the
+        // "newest first" assertion deterministic.
+        createdAt: new Date(Date.now() - 60_000),
       },
       {
         network: 'testnet',

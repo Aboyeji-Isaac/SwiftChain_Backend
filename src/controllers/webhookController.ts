@@ -17,7 +17,7 @@ function requireUser(req: Request): IUser {
 // ─── POST /api/v1/webhooks ──────────────────────────────────────
 
 export const registerWebhook = async (
-  req: Request<unknown, unknown, RegisterWebhookInput>,
+  req: Request<Record<string, string>, unknown, RegisterWebhookInput>,
   res: Response,
   next: NextFunction,
 ): Promise<void> => {

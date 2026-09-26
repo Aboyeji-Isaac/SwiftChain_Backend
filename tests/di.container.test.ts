@@ -9,6 +9,7 @@
 
 import { createDIContainer, resetContainer } from '../src/di/container';
 import { TOKENS } from '../src/di/tokens';
+import { asValue } from 'awilix';
 import type { AwilixContainer } from 'awilix';
 
 describe('DI Container', () => {
@@ -240,7 +241,7 @@ describe('DI Container', () => {
       };
 
       testContainer.register({
-        [TOKENS.logger]: { useValue: mockLogger },
+        [TOKENS.logger]: asValue(mockLogger),
       });
 
       // Resolve the mocked logger
@@ -268,7 +269,7 @@ describe('DI Container', () => {
 
       // Register the mock
       testContainer.register({
-        [TOKENS.authService]: { useValue: mockAuthService },
+        [TOKENS.authService]: asValue(mockAuthService),
       });
 
       // Verify the mock is used

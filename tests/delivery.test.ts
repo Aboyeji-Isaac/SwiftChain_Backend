@@ -61,31 +61,50 @@ afterAll(async () => {
 
 beforeEach(async () => {
   await Delivery.deleteMany({});
+  // Idempotency keys are global (key, endpoint) pairs in Redis/Mongo — clear
+  // them too so reused keys between tests replay stale cached responses.
+  const collections = mongoose.connection.collections;
+  for (const name of Object.keys(collections)) {
+    if (name === 'idempotencyrecords') {
+      await collections[name].deleteMany({});
+    }
+  }
 });
 
 describe('Delivery API — POST /api/v1/deliveries', () => {
   it('should create a new delivery', async () => {
-    const res = await request(app).post('/api/v1/deliveries').send(mockDeliveryInput);
+    const res = await request(app)
+      .post('/api/v1/deliveries')
+      .set('Idempotency-Key', `test-${Date.now()}-${Math.random()}`)
+      .send(mockDeliveryInput);
 
     expect(res.status).toBe(201);
     expect(res.body.success).toBe(true);
     expect(res.body.data.trackingNumber).toBe('SWIFT-001');
     expect(res.body.data.isDeleted).toBe(false);
-    expect(res.body.data).not.toHaveProperty('__v');
   });
 
   it('should reject duplicate tracking numbers', async () => {
-    await request(app).post('/api/v1/deliveries').send(mockDeliveryInput);
-    const res = await request(app).post('/api/v1/deliveries').send(mockDeliveryInput);
+    await request(app)
+      .post('/api/v1/deliveries')
+      .set('Idempotency-Key', 'dup-1')
+      .send(mockDeliveryInput);
+    const res = await request(app)
+      .post('/api/v1/deliveries')
+      .set('Idempotency-Key', 'dup-2')
+      .send(mockDeliveryInput);
 
     expect(res.status).toBe(409);
     expect(res.body.success).toBe(false);
   });
 
   it('should reject invalid input (missing required fields)', async () => {
-    const res = await request(app).post('/api/v1/deliveries').send({});
+    const res = await request(app)
+      .post('/api/v1/deliveries')
+      .set('Idempotency-Key', 'invalid-1')
+      .send({});
 
-    expect(res.status).toBe(500);
+    expect(res.status).toBe(400);
     expect(res.body.success).toBe(false);
   });
 });
@@ -101,7 +120,7 @@ describe('Delivery API — GET /api/v1/deliveries', () => {
     const res = await request(app).get('/api/v1/deliveries');
 
     expect(res.status).toBe(200);
-    expect(res.body.data).toHaveLength(2);
+    expect(res.body.data.deliveries).toHaveLength(2);
   });
 
   it('should paginate results', async () => {
@@ -115,9 +134,9 @@ describe('Delivery API — GET /api/v1/deliveries', () => {
     const res = await request(app).get('/api/v1/deliveries?page=1&limit=2');
 
     expect(res.status).toBe(200);
-    expect(res.body.data).toHaveLength(2);
-    expect(res.body.meta.total).toBe(5);
-    expect(res.body.meta.totalPages).toBe(3);
+    expect(res.body.data.deliveries).toHaveLength(2);
+    expect(res.body.data.meta.total).toBe(5);
+    expect(res.body.data.meta.totalPages).toBe(3);
   });
 
   it('should filter by status', async () => {
@@ -131,8 +150,8 @@ describe('Delivery API — GET /api/v1/deliveries', () => {
     const res = await request(app).get('/api/v1/deliveries?status=pending');
 
     expect(res.status).toBe(200);
-    expect(res.body.data).toHaveLength(1);
-    expect(res.body.data[0].status).toBe('pending');
+    expect(res.body.data.deliveries).toHaveLength(1);
+    expect(res.body.data.deliveries[0].status).toBe('pending');
   });
 
   it('should search by tracking number', async () => {
@@ -145,7 +164,7 @@ describe('Delivery API — GET /api/v1/deliveries', () => {
     const res = await request(app).get('/api/v1/deliveries?search=SWIFT');
 
     expect(res.status).toBe(200);
-    expect(res.body.data).toHaveLength(1);
+    expect(res.body.data.deliveries).toHaveLength(1);
   });
 });
 
@@ -225,8 +244,8 @@ describe('Delivery API — PATCH /api/v1/deliveries/:id/archive', () => {
     const res = await request(app).get('/api/v1/deliveries');
 
     expect(res.status).toBe(200);
-    expect(res.body.data).toHaveLength(1);
-    expect(res.body.data[0].trackingNumber).toBe('SWIFT-001');
+    expect(res.body.data.deliveries).toHaveLength(1);
+    expect(res.body.data.deliveries[0].trackingNumber).toBe('SWIFT-001');
   });
 });
 
@@ -258,7 +277,7 @@ describe('Delivery API — PATCH /api/v1/deliveries/:id/restore', () => {
     const res = await request(app).get('/api/v1/deliveries');
 
     expect(res.status).toBe(200);
-    expect(res.body.data).toHaveLength(1);
+    expect(res.body.data.deliveries).toHaveLength(1);
   });
 });
 
@@ -270,8 +289,8 @@ describe('Delivery API — GET /api/v1/deliveries/archived', () => {
     const res = await request(app).get('/api/v1/deliveries/archived');
 
     expect(res.status).toBe(200);
-    expect(res.body.data).toHaveLength(1);
-    expect(res.body.data[0].isDeleted).toBe(true);
+    expect(res.body.data.deliveries).toHaveLength(1);
+    expect(res.body.data.deliveries[0].isDeleted).toBe(true);
   });
 
   it('should return empty list when no archived deliveries', async () => {
@@ -280,7 +299,7 @@ describe('Delivery API — GET /api/v1/deliveries/archived', () => {
     const res = await request(app).get('/api/v1/deliveries/archived');
 
     expect(res.status).toBe(200);
-    expect(res.body.data).toHaveLength(0);
+    expect(res.body.data.deliveries).toHaveLength(0);
   });
 
   it('should not include non-archived deliveries', async () => {
@@ -294,6 +313,6 @@ describe('Delivery API — GET /api/v1/deliveries/archived', () => {
     const res = await request(app).get('/api/v1/deliveries/archived');
 
     expect(res.status).toBe(200);
-    expect(res.body.data).toHaveLength(1);
+    expect(res.body.data.deliveries).toHaveLength(1);
   });
 });

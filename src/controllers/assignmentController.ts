@@ -21,7 +21,7 @@ export const assignNearestDriver = async (
 
     const message = result.assigned
       ? 'Nearest available driver assigned successfully.'
-      : (result.reason ?? 'No driver could be assigned.');
+      : result.reason ?? 'No driver could be assigned.';
 
     sendSuccess(res, result, message, result.assigned ? StatusCodes.OK : StatusCodes.CONFLICT);
   } catch (error) {

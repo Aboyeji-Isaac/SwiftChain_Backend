@@ -46,9 +46,9 @@ jest.mock('../src/blockchain/soroban.service', () => ({
 
 // ─── Mock Redis / Distributed Locking ──────────────────────────────────
 jest.mock('../src/config/redis', () => ({
-  withLock: jest.fn().mockImplementation(
-    async (_resourceKey: string, fn: () => Promise<any>) => fn(),
-  ),
+  withLock: jest
+    .fn()
+    .mockImplementation(async (_resourceKey: string, fn: () => Promise<any>) => fn()),
   redisClient: {
     get: jest.fn(),
     set: jest.fn(),
@@ -99,13 +99,15 @@ afterAll(async () => {
 /**
  * Create a test user with optional overrides
  */
-const createTestUser = async (overrides: Partial<{
-  email: string;
-  firstName: string;
-  lastName: string;
-  role: UserRole;
-  status: UserStatus;
-}> = {}): Promise<IUser> => {
+const createTestUser = async (
+  overrides: Partial<{
+    email: string;
+    firstName: string;
+    lastName: string;
+    role: UserRole;
+    status: UserStatus;
+  }> = {},
+): Promise<IUser> => {
   const defaultUser = {
     email: `user-${Date.now()}-${Math.random()}@example.com`,
     password: 'SecurePass123!',
@@ -123,14 +125,10 @@ const createTestUser = async (overrides: Partial<{
  * Login a user and return JWT token
  */
 const loginUser = async (email: string, password: string): Promise<string> => {
-  const res = await request(app)
-    .post('/api/v1/auth/login')
-    .send({ email, password });
+  const res = await request(app).post('/api/v1/auth/login').send({ email, password });
 
   if (res.status !== 200 || !res.body.data?.token) {
-    throw new Error(
-      `Login failed: ${res.status} — ${res.body.message || 'unknown error'}`,
-    );
+    throw new Error(`Login failed: ${res.status} — ${res.body.message || 'unknown error'}`);
   }
 
   return res.body.data.token;
@@ -172,10 +170,10 @@ const recordEscrowFunded = async (delivery: IDelivery): Promise<IEscrow> => {
 // ─── E2E Tests ──────────────────────────────────────────────────────────
 
 describe('Escrow Lifecycle E2E Tests', () => {
-
   let buyerUser: IUser;
   let sellerUser: IUser;
   let buyerToken: string;
+  // eslint-disable-next-line @typescript-eslint/no-unused-vars -- assigned in nested beforeAll hooks
   let sellerToken: string;
   let testDelivery: IDelivery;
   let testEscrow: IEscrow;
@@ -199,7 +197,6 @@ describe('Escrow Lifecycle E2E Tests', () => {
   // ── STEP 1: Fund Escrow (via Indexer) ────────────────────────────────
 
   describe('Step 1 — Fund Escrow (Indexer Event)', () => {
-
     beforeEach(async () => {
       testDelivery = await createTestDelivery();
       testEscrow = await recordEscrowFunded(testDelivery);
@@ -274,7 +271,6 @@ describe('Escrow Lifecycle E2E Tests', () => {
   // ── STEP 2: Release Escrow ───────────────────────────────────────────
 
   describe('Step 2 — Release Escrow', () => {
-
     beforeEach(async () => {
       // The global afterEach wipes every collection (including users) between
       // tests, so the buyer/seller accounts are recreated and re-logged-in
@@ -513,7 +509,6 @@ describe('Escrow Lifecycle E2E Tests', () => {
   // ── STEP 3: Get Escrow by Delivery ID ────────────────────────────────
 
   describe('GET /api/v1/escrow/delivery/:deliveryId', () => {
-
     beforeEach(async () => {
       buyerUser = await createTestUser({ firstName: 'Buyer', lastName: 'User' });
       sellerUser = await createTestUser({ firstName: 'Seller', lastName: 'User' });
@@ -553,8 +548,7 @@ describe('Escrow Lifecycle E2E Tests', () => {
     });
 
     it('returns 401 without auth token', async () => {
-      const res = await request(app)
-        .get(`/api/v1/escrow/delivery/${testDelivery._id.toString()}`);
+      const res = await request(app).get(`/api/v1/escrow/delivery/${testDelivery._id.toString()}`);
 
       expect(res.status).toBe(401);
     });
@@ -563,7 +557,6 @@ describe('Escrow Lifecycle E2E Tests', () => {
   // ── STEP 4: Get Escrow by Contract ID ────────────────────────────────
 
   describe('GET /api/v1/escrow/contract/:contractId', () => {
-
     beforeEach(async () => {
       buyerUser = await createTestUser({ firstName: 'Buyer', lastName: 'User' });
       sellerUser = await createTestUser({ firstName: 'Seller', lastName: 'User' });
@@ -594,8 +587,7 @@ describe('Escrow Lifecycle E2E Tests', () => {
     });
 
     it('returns 401 without auth token', async () => {
-      const res = await request(app)
-        .get(`/api/v1/escrow/contract/${testEscrow.contractId}`);
+      const res = await request(app).get(`/api/v1/escrow/contract/${testEscrow.contractId}`);
 
       expect(res.status).toBe(401);
     });
@@ -604,7 +596,6 @@ describe('Escrow Lifecycle E2E Tests', () => {
   // ── STEP 5: Refund Escrow (Separate Test Scenario) ───────────────────
 
   describe('Step 5 — Refund Escrow Scenario', () => {
-
     let refundDelivery: IDelivery;
     let refundEscrow: IEscrow;
 
@@ -616,7 +607,7 @@ describe('Escrow Lifecycle E2E Tests', () => {
 
     it('refund changes escrow status to "refunded"', async () => {
       // Simulate a refund operation at the service level
-      const updatedEscrow = await Escrow.findByIdAndUpdate(
+      const _updatedEscrow = await Escrow.findByIdAndUpdate(
         refundEscrow._id,
         {
           $set: {
@@ -643,7 +634,7 @@ describe('Escrow Lifecycle E2E Tests', () => {
     it('refund transaction is recorded in transactions array', async () => {
       const refundTxHash = `txrefund-${Date.now()}`;
 
-      const updatedEscrow = await Escrow.findByIdAndUpdate(
+      const _updatedEscrow = await Escrow.findByIdAndUpdate(
         refundEscrow._id,
         {
           $set: {
@@ -670,20 +661,14 @@ describe('Escrow Lifecycle E2E Tests', () => {
     });
 
     it('isFundsLocked returns false when refunded', async () => {
-      await Escrow.findByIdAndUpdate(
-        refundEscrow._id,
-        { $set: { status: EscrowStatus.REFUNDED } },
-      );
+      await Escrow.findByIdAndUpdate(refundEscrow._id, { $set: { status: EscrowStatus.REFUNDED } });
 
       const stored = await Escrow.findById(refundEscrow._id);
       expect(stored?.isFundsLocked).toBe(false);
     });
 
     it('isSettled returns true when refunded', async () => {
-      await Escrow.findByIdAndUpdate(
-        refundEscrow._id,
-        { $set: { status: EscrowStatus.REFUNDED } },
-      );
+      await Escrow.findByIdAndUpdate(refundEscrow._id, { $set: { status: EscrowStatus.REFUNDED } });
 
       const stored = await Escrow.findById(refundEscrow._id);
       expect(stored?.isSettled).toBe(true);
@@ -693,7 +678,6 @@ describe('Escrow Lifecycle E2E Tests', () => {
   // ── STEP 6: Disputed Escrow Scenario ─────────────────────────────────
 
   describe('Step 6 — Disputed Escrow Scenario', () => {
-
     let disputeDelivery: IDelivery;
     let disputeEscrow: IEscrow;
 
@@ -703,10 +687,9 @@ describe('Escrow Lifecycle E2E Tests', () => {
     });
 
     it('escrow can move to disputed status', async () => {
-      await Escrow.findByIdAndUpdate(
-        disputeEscrow._id,
-        { $set: { status: EscrowStatus.DISPUTED, disputeReason: 'Delivery not received' } },
-      );
+      await Escrow.findByIdAndUpdate(disputeEscrow._id, {
+        $set: { status: EscrowStatus.DISPUTED, disputeReason: 'Delivery not received' },
+      });
 
       const stored = await Escrow.findById(disputeEscrow._id);
       expect(stored?.status).toBe(EscrowStatus.DISPUTED);
@@ -714,20 +697,18 @@ describe('Escrow Lifecycle E2E Tests', () => {
     });
 
     it('isFundsLocked returns true when disputed (funds still held)', async () => {
-      await Escrow.findByIdAndUpdate(
-        disputeEscrow._id,
-        { $set: { status: EscrowStatus.DISPUTED } },
-      );
+      await Escrow.findByIdAndUpdate(disputeEscrow._id, {
+        $set: { status: EscrowStatus.DISPUTED },
+      });
 
       const stored = await Escrow.findById(disputeEscrow._id);
       expect(stored?.isFundsLocked).toBe(true);
     });
 
     it('isSettled returns false when disputed (not terminal)', async () => {
-      await Escrow.findByIdAndUpdate(
-        disputeEscrow._id,
-        { $set: { status: EscrowStatus.DISPUTED } },
-      );
+      await Escrow.findByIdAndUpdate(disputeEscrow._id, {
+        $set: { status: EscrowStatus.DISPUTED },
+      });
 
       const stored = await Escrow.findById(disputeEscrow._id);
       expect(stored?.isSettled).toBe(false);
@@ -749,7 +730,6 @@ describe('Escrow Lifecycle E2E Tests', () => {
   // ── STEP 7: Complete Lifecycle Flow ─────────────────────────────────
 
   describe('Complete Escrow Lifecycle Flow', () => {
-
     it('executes full lifecycle: Pending → Locked → Released', async () => {
       // 1. Create delivery and fund escrow
       const delivery = await createTestDelivery();
@@ -794,23 +774,20 @@ describe('Escrow Lifecycle E2E Tests', () => {
       const escrow = await recordEscrowFunded(delivery);
 
       // Add a refund transaction
-      await Escrow.findByIdAndUpdate(
-        escrow._id,
-        {
-          $set: {
-            status: EscrowStatus.REFUNDED,
-            refundedAt: new Date(),
-          },
-          $push: {
-            transactions: {
-              hash: `txrefund-${Date.now()}`,
-              type: 'refund',
-              ledger: 100002,
-              recordedAt: new Date(),
-            },
+      await Escrow.findByIdAndUpdate(escrow._id, {
+        $set: {
+          status: EscrowStatus.REFUNDED,
+          refundedAt: new Date(),
+        },
+        $push: {
+          transactions: {
+            hash: `txrefund-${Date.now()}`,
+            type: 'refund',
+            ledger: 100002,
+            recordedAt: new Date(),
           },
         },
-      );
+      });
 
       const stored = await Escrow.findById(escrow._id);
       expect(stored?.transactions).toHaveLength(2);
@@ -826,7 +803,6 @@ describe('Escrow Lifecycle E2E Tests', () => {
   // ── STEP 8: Error Cases & Validation ────────────────────────────────
 
   describe('Error Cases & Validation', () => {
-
     it('returns 400 for invalid ledger number (negative)', async () => {
       const delivery = await createTestDelivery();
       const escrow = await recordEscrowFunded(delivery);
@@ -896,12 +872,12 @@ describe('Escrow Lifecycle E2E Tests', () => {
   // ── STEP 9: Concurrent Operations & Distributed Locking ──────────────
 
   describe('Distributed Locking (Concurrency Control)', () => {
-
     it('release uses distributed lock to prevent race conditions', async () => {
       const delivery = await createTestDelivery();
       const escrow = await recordEscrowFunded(delivery);
 
       // Mock verifies lock was used (jest.mock of withLock above)
+      // eslint-disable-next-line @typescript-eslint/no-var-requires -- reading the jest.mock factory result
       const { withLock } = require('../src/config/redis');
 
       await request(app)

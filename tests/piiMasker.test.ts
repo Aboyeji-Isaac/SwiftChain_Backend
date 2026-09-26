@@ -75,8 +75,7 @@ describe('maskString', () => {
   });
 
   it('redacts a PEM private key block', () => {
-    const pem =
-      '-----BEGIN RSA PRIVATE KEY-----\nMIIEowIBAAKCAQEA\n-----END RSA PRIVATE KEY-----';
+    const pem = '-----BEGIN RSA PRIVATE KEY-----\nMIIEowIBAAKCAQEA\n-----END RSA PRIVATE KEY-----';
     expect(maskString(`key: ${pem}`)).toBe(`key: ${REDACTED}`);
   });
 

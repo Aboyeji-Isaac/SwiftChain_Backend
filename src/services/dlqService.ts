@@ -21,7 +21,10 @@ export class DlqService {
   /**
    * List DLQ entries with pagination.
    */
-  public async listEntries(page: number = 1, limit: number = 10): Promise<{ data: IDlqEntry[]; total: number }> {
+  public async listEntries(
+    page: number = 1,
+    limit: number = 10,
+  ): Promise<{ data: IDlqEntry[]; total: number }> {
     const skip = (page - 1) * limit;
     const [data, total] = await Promise.all([
       DlqEntry.find().sort({ createdAt: -1 }).skip(skip).limit(limit).exec(),
@@ -52,13 +55,13 @@ export class DlqService {
     try {
       // Dynamic import to break circular dependency with stellarService
       const { stellarService } = await import('./stellarService');
-      
+
       // Currently, we assume the payload is a SubmitEscrowLockInput
       // since that's the main transaction failure we are catching.
       // If there are other types, we might need a type field in the DLQ entry.
       // For now, we attempt to retry it via stellarService.submitEscrowLock
       const result = await stellarService.submitEscrowLock(entry.payload);
-      
+
       entry.status = DlqStatus.RESOLVED;
       await entry.save();
       return result;

@@ -236,7 +236,10 @@ export class IdempotencyService {
     await this.updateInMongo(key, endpoint, payload).catch((err) => {
       if (!savedInRedis) {
         // If both stores fail we cannot guarantee idempotency — log loudly.
-        logger.error('[IdempotencyService] Failed to persist completed record in both stores:', err);
+        logger.error(
+          '[IdempotencyService] Failed to persist completed record in both stores:',
+          err,
+        );
       } else {
         logger.warn('[IdempotencyService] Mongo update failed (Redis ok):', err);
       }

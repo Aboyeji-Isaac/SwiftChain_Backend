@@ -25,19 +25,22 @@ export class IndexerService {
       const currentLedger = currentLedgerResponse.sequence;
       const logs = await EventLog.find({}).lean();
       return logs.map((log) => {
-        const lag = Math.max(0, currentLedger - log.lastProcessedLedger);
+        const lastProcessedLedger = Number(log.ledgerSequence ?? 0);
         return {
           eventType: log.eventType,
-          contractId: log.contractId,
-          lastProcessedLedger: log.lastProcessedLedger,
+          contractId: log.contractId ?? '',
+          lastProcessedLedger,
           currentLedger,
-          lag,
+          lag: Math.max(0, currentLedger - lastProcessedLedger),
           updatedAt: log.updatedAt,
         };
       });
     } catch (error) {
-      logger.error(`[IndexerService] Error fetching indexer status: ${
-        error instanceof Error ? error.message : String(error)}`);
+      logger.error(
+        `[IndexerService] Error fetching indexer status: ${
+          error instanceof Error ? error.message : String(error)
+        }`,
+      );
       throw error;
     }
   }
@@ -45,9 +48,15 @@ export class IndexerService {
   public async processDeliveryStatusUpdated(event: DeliveryStatusUpdatedEvent): Promise<void> {
     try {
       const { contractId, deliveryId, newStatus } = event;
-      await Delivery.findOneAndUpdate({ _id: deliveryId, contractId }, { status: newStatus }, { new: true, runValidators: true }).lean();
+      const updatedDelivery = await Delivery.findOneAndUpdate(
+        { _id: deliveryId, contractId },
+        { status: newStatus },
+        { new: true, runValidators: true },
+      ).lean();
       if (!updatedDelivery) {
-        logger.warn(`[IndexerService] Delivery not found for id ${deliveryId} on contract ${contractId}`);
+        logger.warn(
+          `[IndexerService] Delivery not found for id ${deliveryId} on contract ${contractId}`,
+        );
         return;
       }
       // Push the transition to any connected realtime clients (no-op when the
@@ -57,10 +66,15 @@ export class IndexerService {
         deliveryId,
         status: newStatus,
       });
-      logger.info(`[IndexerService] Delivery ${deliveryId} status updated to ${newStatus} on contract ${contractId}`);
+      logger.info(
+        `[IndexerService] Delivery ${deliveryId} status updated to ${newStatus} on contract ${contractId}`,
+      );
     } catch (error) {
-      logger.error(`[IndexerService] Error processing delivery_status_updated event: ${
-        error instanceof Error ? error.message : String(error)}`);
+      logger.error(
+        `[IndexerService] Error processing delivery_status_updated event: ${
+          error instanceof Error ? error.message : String(error)
+        }`,
+      );
       throw error;
     }
   }

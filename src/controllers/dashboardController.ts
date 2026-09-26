@@ -41,12 +41,7 @@ export class DashboardController {
 
       const metrics = await this.service.getAdminDashboardMetrics({ forceRefresh });
 
-      sendSuccess(
-        res,
-        metrics,
-        'Admin dashboard metrics retrieved successfully',
-        StatusCodes.OK,
-      );
+      sendSuccess(res, metrics, 'Admin dashboard metrics retrieved successfully', StatusCodes.OK);
     } catch (error) {
       next(error);
     }

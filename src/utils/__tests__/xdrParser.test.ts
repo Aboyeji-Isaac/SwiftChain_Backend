@@ -5,7 +5,7 @@ describe('XDR Parser', () => {
     it('should parse a valid delivery XDR payload', () => {
       const mockDeliveryXdr = createMockDeliveryXdr();
       const result = parseXdrEvent(mockDeliveryXdr);
-      
+
       expect(result).not.toBeNull();
       expect(result?.type).toBe('delivery');
       expect(result).toHaveProperty('deliveryId');
@@ -17,7 +17,7 @@ describe('XDR Parser', () => {
     it('should parse a valid escrow XDR payload', () => {
       const mockEscrowXdr = createMockEscrowXdr();
       const result = parseXdrEvent(mockEscrowXdr);
-      
+
       expect(result).not.toBeNull();
       expect(result?.type).toBe('escrow');
       expect(result).toHaveProperty('escrowId');
@@ -81,8 +81,8 @@ describe('XDR Parser', () => {
         createMockDeliveryXdr('delivery3', 'recipient3', '300'),
       ];
 
-      const results = mockDeliveries.map(xdr => parseXdrEvent(xdr));
-      
+      const results = mockDeliveries.map((xdr) => parseXdrEvent(xdr));
+
       expect(results).toHaveLength(3);
       results.forEach((result, index) => {
         expect(result?.type).toBe('delivery');
@@ -95,7 +95,7 @@ describe('XDR Parser', () => {
   function createMockDeliveryXdr(
     deliveryId: string = 'del_123',
     recipient: string = 'GB123...',
-    amount: string = '100'
+    amount: string = '100',
   ): string {
     const mockData = {
       type: 'delivery',
@@ -103,7 +103,7 @@ describe('XDR Parser', () => {
       recipient,
       amount,
       asset: 'XLM',
-      timestamp: Date.now()
+      timestamp: Date.now(),
     };
     return Buffer.from(JSON.stringify(mockData)).toString('base64');
   }
@@ -112,7 +112,7 @@ describe('XDR Parser', () => {
     escrowId: string = 'esc_456',
     client: string = 'GC123...',
     freelancer: string = 'GB456...',
-    amount: string = '500'
+    amount: string = '500',
   ): string {
     const mockData = {
       type: 'escrow',
@@ -122,7 +122,7 @@ describe('XDR Parser', () => {
       amount,
       asset: 'XLM',
       releaseCondition: 'milestone_completed',
-      timestamp: Date.now()
+      timestamp: Date.now(),
     };
     return Buffer.from(JSON.stringify(mockData)).toString('base64');
   }

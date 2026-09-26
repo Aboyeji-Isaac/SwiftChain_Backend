@@ -263,13 +263,17 @@ export class EscrowService {
         delivery.status = DeliveryStatus.COMPLETED;
         await delivery.save();
         logger.debug(
-          `[EscrowService] Delivery status updated to COMPLETED — delivery=${String(escrow.delivery)}`,
+          `[EscrowService] Delivery status updated to COMPLETED — delivery=${String(
+            escrow.delivery,
+          )}`,
         );
       }
 
       logger.info(
         `[EscrowService] Escrow released successfully — id=${escrowId} ` +
-          `contract=${escrow.contractId} tx=${transactionHash} releasedBy=${releasedBy ?? 'system'}`,
+          `contract=${escrow.contractId} tx=${transactionHash} releasedBy=${
+            releasedBy ?? 'system'
+          }`,
       );
 
       return escrow;
@@ -326,7 +330,10 @@ export class EscrowService {
       },
     );
 
-    const flaggedEscrows = await Escrow.find({ _id: { $in: idsToFlag }, status: EscrowStatus.EXPIRED });
+    const flaggedEscrows = await Escrow.find({
+      _id: { $in: idsToFlag },
+      status: EscrowStatus.EXPIRED,
+    });
 
     logger.info(
       `[EscrowMonitor] Flagged ${flaggedEscrows.length} expired escrow(s) at ledger=${

@@ -95,7 +95,9 @@ export function initializeSocketServer(httpServer: HttpServer): TypedServer {
           logger.info(`[Socket] Token refreshed for socketId=${socket.id}`);
         }
       } catch (err) {
-        logger.warn(`Token refresh verification failed for socket ${socket.id}: ${(err as Error).message}`);
+        logger.warn(
+          `Token refresh verification failed for socket ${socket.id}: ${(err as Error).message}`,
+        );
         socket.emit('auth_expired');
         socket.disconnect(true);
       }
@@ -230,7 +232,7 @@ function extractAuthInfo(socket: TypedSocket): { userId?: string; tokenExp?: num
  * @param socket - The connecting socket.
  * @returns        The raw token string, or undefined if absent.
  */
-function extractToken(socket: TypedSocket): string | undefined {
+function _extractToken(socket: TypedSocket): string | undefined {
   const auth = socket.handshake.auth as Record<string, unknown>;
 
   if (typeof auth?.token === 'string' && auth.token.trim()) {

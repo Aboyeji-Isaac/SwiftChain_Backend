@@ -23,7 +23,7 @@ import assignmentRoutes from './assignmentRoutes';
 import proofOfDeliveryRoutes from './proofOfDeliveryRoutes';
 import escrowRoutes from './escrow.routes';
 import escrowIndexerRoutes from './escrowIndexer.routes';
-import indexerRoutes from './indexerRoutes';
+import indexerRoutes from './indexer.routes';
 
 const router = Router();
 

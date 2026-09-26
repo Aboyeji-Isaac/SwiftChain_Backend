@@ -17,9 +17,7 @@ export const startTrackedSession = async (): Promise<ClientSession> => {
   activeSessions.add(session);
 
   const originalEndSession = session.endSession.bind(session);
-  session.endSession = (async (
-    ...args: Parameters<ClientSession['endSession']>
-  ): Promise<void> => {
+  session.endSession = (async (...args: Parameters<ClientSession['endSession']>): Promise<void> => {
     activeSessions.delete(session);
     await originalEndSession(...args);
   }) as ClientSession['endSession'];
@@ -36,16 +34,12 @@ export const waitForActiveTransactions = async (timeoutMs: number): Promise<void
   const pollMs = 100;
 
   while (activeSessions.size > 0 && Date.now() < deadline) {
-    logger.info(
-      `[Database] Waiting for ${activeSessions.size} active transaction session(s)...`,
-    );
+    logger.info(`[Database] Waiting for ${activeSessions.size} active transaction session(s)...`);
     await new Promise((resolve) => setTimeout(resolve, pollMs));
   }
 
   if (activeSessions.size > 0) {
-    logger.warn(
-      `[Database] Proceeding with ${activeSessions.size} active session(s) still open`,
-    );
+    logger.warn(`[Database] Proceeding with ${activeSessions.size} active session(s) still open`);
   } else {
     logger.info('[Database] Active transaction sessions drained');
   }

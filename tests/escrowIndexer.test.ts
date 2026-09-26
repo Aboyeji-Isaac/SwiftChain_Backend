@@ -12,7 +12,6 @@ import {
   parseEscrowResolutionEvent,
   handleEscrowReleasedEvent,
   handleEscrowRefundedEvent,
-  EscrowResolutionEventData,
 } from '../src/indexer/escrowHandlers';
 import { escrowIndexerService } from '../src/services/escrowIndexerService';
 import Escrow, { EscrowStatus } from '../src/models/Escrow';
@@ -141,7 +140,7 @@ describe('handleEscrowReleasedEvent and service integration', () => {
   });
 
   it('updates escrow status to released and records transaction', async () => {
-    const escrowId = new Types.ObjectId();
+    const _escrowId = new Types.ObjectId();
     const escrow = await Escrow.create({
       delivery: new Types.ObjectId(),
       status: EscrowStatus.LOCKED,
@@ -377,7 +376,7 @@ describe('escrowIndexerService', () => {
 
     it('retrieves an escrow by contract ID', async () => {
       const contractId = 'CESCROWCONTRACT';
-      const escrow = await Escrow.create({
+      const _escrow = await Escrow.create({
         delivery: new Types.ObjectId(),
         status: EscrowStatus.LOCKED,
         amount: 5000,

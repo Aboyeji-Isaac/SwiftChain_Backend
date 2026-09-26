@@ -40,11 +40,7 @@ export class DriverLocationController {
    *   `availableOnly`     — optional boolean, defaults to true.
    *   `status`            — optional availability filter.
    */
-  public async getNearbyDrivers(
-    req: Request,
-    res: Response,
-    next: NextFunction,
-  ): Promise<void> {
+  public async getNearbyDrivers(req: Request, res: Response, next: NextFunction): Promise<void> {
     try {
       const query: NearbyDriversQuery = {
         lat: this.requireNumber(req.query.lat, 'lat'),
@@ -73,11 +69,7 @@ export class DriverLocationController {
    *
    * Records the authenticated driver's current position.
    */
-  public async updateMyLocation(
-    req: Request,
-    res: Response,
-    next: NextFunction,
-  ): Promise<void> {
+  public async updateMyLocation(req: Request, res: Response, next: NextFunction): Promise<void> {
     try {
       const user = (req as Request & { user?: IUser }).user;
       if (!user) {
@@ -126,11 +118,7 @@ export class DriverLocationController {
    *
    * Returns a single driver's most recent position.
    */
-  public async getDriverLocation(
-    req: Request,
-    res: Response,
-    next: NextFunction,
-  ): Promise<void> {
+  public async getDriverLocation(req: Request, res: Response, next: NextFunction): Promise<void> {
     try {
       const document = await this.service.getDriverLocation(req.params.driverId);
 
@@ -161,11 +149,7 @@ export class DriverLocationController {
    * planner used and how many documents it examined. Admin-only: it exposes
    * database internals and is meant for profiling index health.
    */
-  public async explainNearbyQuery(
-    req: Request,
-    res: Response,
-    next: NextFunction,
-  ): Promise<void> {
+  public async explainNearbyQuery(req: Request, res: Response, next: NextFunction): Promise<void> {
     try {
       const summary = await this.service.explainProximityQuery({
         lat: this.requireNumber(req.query.lat, 'lat'),

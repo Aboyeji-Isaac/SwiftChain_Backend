@@ -18,6 +18,19 @@ jest.mock('../src/config/logger', () => ({
 
 jest.mock('axios');
 
+// The stellar config pulls in the SDK's horizon axios client, which cannot be
+// constructed under jest; disputeService only calls sorobanService.getLatestLedger.
+jest.mock('../src/config/stellar', () => ({
+  stellarConfig: { network: 'testnet' },
+  sorobanRpcClient: {},
+}));
+
+jest.mock('../src/blockchain/soroban.service', () => ({
+  sorobanService: {
+    getLatestLedger: jest.fn(),
+  },
+}));
+
 import { Dispute, DisputeStatus } from '../src/models/Dispute';
 import { disputeService } from '../src/services/disputeService';
 import {
@@ -103,6 +116,9 @@ describe('handleDisputeResolved', () => {
       disputeId: 'dispute-4',
       deliveryId: 'delivery-4',
       openedBy: 'GABC...OPENER',
+      raisedBy: 'GABC...OPENER',
+      reason: 'other',
+      description: 'On-chain dispute',
       status: DisputeStatus.OPEN,
       openedLedger: 100,
     });
@@ -141,6 +157,9 @@ describe('handleDisputeResolved', () => {
         disputeId: 'dispute-5',
         deliveryId: 'delivery-5',
         openedBy: 'GABC...OPENER',
+        raisedBy: 'GABC...OPENER',
+        reason: 'other',
+        description: 'On-chain dispute',
         status: DisputeStatus.OPEN,
         openedLedger: 100,
       });
@@ -197,6 +216,9 @@ describe('disputeService.listDisputes / getDisputeById', () => {
         disputeId: 'a',
         deliveryId: 'd1',
         openedBy: 'G1',
+        raisedBy: 'G1',
+        reason: 'other',
+        description: 'On-chain dispute',
         status: DisputeStatus.OPEN,
         openedLedger: 1,
       },
@@ -204,6 +226,9 @@ describe('disputeService.listDisputes / getDisputeById', () => {
         disputeId: 'b',
         deliveryId: 'd2',
         openedBy: 'G2',
+        raisedBy: 'G2',
+        reason: 'other',
+        description: 'On-chain dispute',
         status: DisputeStatus.RESOLVED,
         openedLedger: 2,
         resolvedLedger: 3,

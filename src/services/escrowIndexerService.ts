@@ -174,7 +174,7 @@ export class EscrowIndexerService {
    * @returns The escrow document, or null if not found
    */
   async getEscrowByEscrowId(escrowId: string): Promise<IEscrow | null> {
-    let query: Record<string, unknown> = {};
+    const query: Record<string, unknown> = {};
 
     if (Types.ObjectId.isValid(escrowId)) {
       query._id = new Types.ObjectId(escrowId);

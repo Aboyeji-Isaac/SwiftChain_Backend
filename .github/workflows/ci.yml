@@ -48,7 +48,8 @@ jobs:
         env:
           CI: true
           MONGO_URI: mongodb://localhost:27017/swiftchain_test
-          JWT_SECRET: test_secret
+          # env.ts requires a >=16 char secret; a shorter value would exit(1)
+          JWT_SECRET: test_secret_for_ci_pipeline_16
 
       - name: Upload Coverage Reports
         if: always()

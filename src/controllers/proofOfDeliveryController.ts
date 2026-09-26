@@ -37,12 +37,7 @@ export const uploadProofOfDeliveryHandler = async (
       sizeBytes: file.size,
     });
 
-    sendSuccess(
-      res,
-      { delivery },
-      'Proof of delivery uploaded successfully.',
-      StatusCodes.CREATED,
-    );
+    sendSuccess(res, { delivery }, 'Proof of delivery uploaded successfully.', StatusCodes.CREATED);
   } catch (error) {
     next(error);
   }

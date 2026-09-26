@@ -57,6 +57,11 @@ export interface AuthExpiredPayload {
 /**
  * Payload sent by the client on `auth_refresh` with a new JWT token.
  */
+export interface RefreshTokenPayload {
+  /** New JWT token. */
+  token: string;
+}
+
 export interface AuthRefreshPayload {
   token: string;
 }
@@ -191,7 +196,9 @@ export interface ServerToClientEvents {
   /** Ack sent back to the driver after a live location update is processed. */
   location_update_ack: (payload: LocationUpdateAck) => void;
   /** Notify client that authentication token has expired */
-  auth_expired: () => void;
+  auth_expired: (payload?: AuthExpiredPayload) => void;
+  /** Acknowledge a client's token refresh attempt */
+  auth_refresh_ack: (payload: AuthRefreshAckPayload) => void;
 }
 
 /**
@@ -209,6 +216,8 @@ export interface ClientToServerEvents {
   driver_location_update: (payload: DriverLocationUpdatePayload) => void;
   /** Fired by client to submit a refreshed JWT without reconnecting. */
   auth_refresh: (payload: AuthRefreshPayload) => void;
+  /** Legacy token-refresh event used by older clients. */
+  refresh_token: (payload: RefreshTokenPayload) => void;
 }
 
 /**

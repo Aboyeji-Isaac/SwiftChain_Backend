@@ -40,7 +40,4 @@ export interface EscrowResolvedEvent {
 export type EscrowStatus = 'pending' | 'locked' | 'released' | 'refunded' | 'disputed';
 
 /** Terminal statuses that cannot transition further */
-export const TERMINAL_STATUSES: ReadonlySet<EscrowStatus> = new Set([
-  'released',
-  'refunded',
-]);
+export const TERMINAL_STATUSES: ReadonlySet<EscrowStatus> = new Set(['released', 'refunded']);

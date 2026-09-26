@@ -89,7 +89,8 @@ export function getAllCircuitBreakerStatuses(): CircuitBreakerStatus[] {
         timeouts: stats.timeouts,
         fallbacks: stats.fallbacks,
         fires: stats.fires,
-        percentError: Number(stats.percentError ?? 0),
+        percentError:
+          stats.fires > 0 ? Number(((stats.failures + stats.timeouts) / stats.fires) * 100) : 0,
       },
     };
   });
@@ -137,9 +138,7 @@ export function createCircuitBreaker<TArgs extends unknown[], TResult>(
     // `cb.fire(fn, ...args)`.  We create the breaker without a bound action so
     // the same instance can wrap any compatible function.
     async (..._args: TArgs): Promise<TResult> => {
-      throw new Error(
-        `[CircuitBreaker] ${name}: No action bound — use cb.fire(fn, ...args).`,
-      );
+      throw new Error(`[CircuitBreaker] ${name}: No action bound — use cb.fire(fn, ...args).`);
     },
     {
       name,
@@ -161,9 +160,7 @@ export function createCircuitBreaker<TArgs extends unknown[], TResult>(
   // ── Event instrumentation ──────────────────────────────────────────────────
 
   cb.on('open', () => {
-    logger.warn(
-      `[CircuitBreaker] "${name}" OPENED — calls will be short-circuited to fallback`,
-    );
+    logger.warn(`[CircuitBreaker] "${name}" OPENED — calls will be short-circuited to fallback`);
   });
 
   cb.on('halfOpen', () => {
@@ -176,9 +173,7 @@ export function createCircuitBreaker<TArgs extends unknown[], TResult>(
 
   cb.on('fallback', (_result, ...args) => {
     logger.warn(`[CircuitBreaker] "${name}" fallback triggered`, {
-      args: (args as unknown[]).map((a) =>
-        typeof a === 'object' ? JSON.stringify(a) : String(a),
-      ),
+      args: (args as unknown[]).map((a) => (typeof a === 'object' ? JSON.stringify(a) : String(a))),
     });
   });
 
@@ -187,9 +182,7 @@ export function createCircuitBreaker<TArgs extends unknown[], TResult>(
   });
 
   cb.on('reject', () => {
-    logger.warn(
-      `[CircuitBreaker] "${name}" call rejected — circuit is OPEN`,
-    );
+    logger.warn(`[CircuitBreaker] "${name}" call rejected — circuit is OPEN`);
   });
 
   cb.on('success', () => {

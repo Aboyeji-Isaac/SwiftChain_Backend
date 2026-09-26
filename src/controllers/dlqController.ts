@@ -8,11 +8,7 @@ export class DlqController {
    * GET /api/v1/dlq
    * List DLQ entries
    */
-  public async getDlqEntries(
-    req: Request,
-    res: Response,
-    next: NextFunction,
-  ): Promise<void> {
+  public async getDlqEntries(req: Request, res: Response, next: NextFunction): Promise<void> {
     try {
       const page = parseInt(req.query.page as string, 10) || 1;
       const limit = parseInt(req.query.limit as string, 10) || 10;
@@ -36,11 +32,7 @@ export class DlqController {
    * POST /api/v1/dlq/:id/retry
    * Retry a specific DLQ entry
    */
-  public async retryDlqEntry(
-    req: Request,
-    res: Response,
-    next: NextFunction,
-  ): Promise<void> {
+  public async retryDlqEntry(req: Request, res: Response, next: NextFunction): Promise<void> {
     try {
       const { id } = req.params;
       const result = await dlqService.retryEntry(id);

@@ -48,9 +48,9 @@ describe('withTimeout', () => {
   });
 
   it('propagates the underlying rejection rather than a timeout', async () => {
-    await expect(
-      withTimeout(() => Promise.reject(new Error('boom')), 500, 'op'),
-    ).rejects.toThrow('boom');
+    await expect(withTimeout(() => Promise.reject(new Error('boom')), 500, 'op')).rejects.toThrow(
+      'boom',
+    );
   });
 });
 
@@ -117,17 +117,14 @@ describe('withRetry timeout handling', () => {
   it('invokes onRecovery only when a retry eventually succeeds', async () => {
     const onRecovery = jest.fn();
 
-    await withRetry(
-      jest.fn().mockRejectedValueOnce(new Error('blip')).mockResolvedValue('ok'),
-      {
-        maxAttempts: 3,
-        baseDelayMs: 1,
-        maxDelayMs: 2,
-        jitter: 0,
-        operationName: 'recovers',
-        onRecovery,
-      },
-    );
+    await withRetry(jest.fn().mockRejectedValueOnce(new Error('blip')).mockResolvedValue('ok'), {
+      maxAttempts: 3,
+      baseDelayMs: 1,
+      maxDelayMs: 2,
+      jitter: 0,
+      operationName: 'recovers',
+      onRecovery,
+    });
 
     expect(onRecovery).toHaveBeenCalledTimes(1);
     expect(onRecovery.mock.calls[0][0].attempt).toBe(2);

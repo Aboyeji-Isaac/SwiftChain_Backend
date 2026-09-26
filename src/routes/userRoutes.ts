@@ -37,35 +37,21 @@ router.get(
  * @desc    Get user by ID
  * @access  Private
  */
-router.get(
-  '/:id',
-  authMiddleware,
-  userController.getUserById,
-);
+router.get('/:id', authMiddleware, userController.getUserById);
 
 /**
  * @route   PUT /api/v1/users/:id
  * @desc    Update user profile
  * @access  Private (Admin only)
  */
-router.put(
-  '/:id',
-  authMiddleware,
-  requireRole(UserRole.ADMIN),
-  userController.updateUser,
-);
+router.put('/:id', authMiddleware, requireRole(UserRole.ADMIN), userController.updateUser);
 
 /**
  * @route   DELETE /api/v1/users/:id
  * @desc    Soft delete user with cascading to related records
  * @access  Private (Admin only)
  */
-router.delete(
-  '/:id',
-  authMiddleware,
-  requireRole(UserRole.ADMIN),
-  userController.deleteUser,
-);
+router.delete('/:id', authMiddleware, requireRole(UserRole.ADMIN), userController.deleteUser);
 
 /**
  * @route   POST /api/v1/users/:id/restore
@@ -84,10 +70,6 @@ router.post(
  * @desc    Update user password
  * @access  Private (own user only)
  */
-router.put(
-  '/:id/password',
-  authMiddleware,
-  userController.updatePassword,
-);
+router.put('/:id/password', authMiddleware, userController.updatePassword);
 
 export default router;

@@ -69,9 +69,19 @@ describe('Admin Dashboard Metrics API', () => {
 
     it('should return cached metrics if present in Redis and not forceRefreshed', async () => {
       const mockCachedMetrics = {
-        activeDeliveries: { total: 4, byStatus: { pending: 4, funded: 0, assigned: 0, in_progress: 0 } },
+        activeDeliveries: {
+          total: 4,
+          byStatus: { pending: 4, funded: 0, assigned: 0, in_progress: 0 },
+        },
         onlineDrivers: { totalActiveDrivers: 5, recentlyActiveDrivers: 1 },
-        escrow: { totalVolume: 100, lockedVolume: 100, releasedVolume: 0, refundedVolume: 0, activeCount: 1, totalCount: 1 },
+        escrow: {
+          totalVolume: 100,
+          lockedVolume: 100,
+          releasedVolume: 0,
+          refundedVolume: 0,
+          activeCount: 1,
+          totalCount: 1,
+        },
         metadata: { timestamp: new Date().toISOString(), cached: true, cacheTtlSeconds: 60 },
       };
 
@@ -129,13 +139,25 @@ describe('Admin Dashboard Metrics API', () => {
 
     it('should send success response with metrics when user is authenticated', async () => {
       const mockMetrics = {
-        activeDeliveries: { total: 2, byStatus: { pending: 1, funded: 0, assigned: 0, in_progress: 1 } },
+        activeDeliveries: {
+          total: 2,
+          byStatus: { pending: 1, funded: 0, assigned: 0, in_progress: 1 },
+        },
         onlineDrivers: { totalActiveDrivers: 3, recentlyActiveDrivers: 1 },
-        escrow: { totalVolume: 300, lockedVolume: 300, releasedVolume: 0, refundedVolume: 0, activeCount: 1, totalCount: 1 },
+        escrow: {
+          totalVolume: 300,
+          lockedVolume: 300,
+          releasedVolume: 0,
+          refundedVolume: 0,
+          activeCount: 1,
+          totalCount: 1,
+        },
         metadata: { timestamp: new Date().toISOString(), cached: false, cacheTtlSeconds: 60 },
       };
 
-      jest.spyOn(dashboardService, 'getAdminDashboardMetrics').mockResolvedValue(mockMetrics as any);
+      jest
+        .spyOn(dashboardService, 'getAdminDashboardMetrics')
+        .mockResolvedValue(mockMetrics as any);
 
       const req = {
         user: { _id: 'admin123', role: UserRole.ADMIN },
@@ -150,7 +172,9 @@ describe('Admin Dashboard Metrics API', () => {
 
       await dashboardController.getDashboardMetrics(req, res, next);
 
-      expect(dashboardService.getAdminDashboardMetrics).toHaveBeenCalledWith({ forceRefresh: true });
+      expect(dashboardService.getAdminDashboardMetrics).toHaveBeenCalledWith({
+        forceRefresh: true,
+      });
       expect(res.status).toHaveBeenCalledWith(StatusCodes.OK);
       expect(res.json).toHaveBeenCalledWith(
         expect.objectContaining({

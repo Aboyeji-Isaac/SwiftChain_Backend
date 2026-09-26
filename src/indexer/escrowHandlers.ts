@@ -254,6 +254,15 @@ export function parseEscrowResolutionEvent(
       return null;
     }
 
+    // The contract encodes amounts as integer stroop values; a non-numeric
+    // amount means a malformed or spoofed event payload.
+    if (!/^\d+$/.test(amount)) {
+      logger.warn(
+        `[EscrowHandlers] escrow resolution event id=${event.id}: non-numeric amount "${amount}"`,
+      );
+      return null;
+    }
+
     return {
       escrowId,
       amount,

@@ -181,10 +181,7 @@ export class DriverLocationService {
     } catch (error) {
       const message = error instanceof Error ? error.message : String(error);
       logger.error(`[DriverLocationService] Proximity search failed: ${message}`);
-      throw new AppError(
-        'Unable to search for nearby drivers.',
-        StatusCodes.INTERNAL_SERVER_ERROR,
-      );
+      throw new AppError('Unable to search for nearby drivers.', StatusCodes.INTERNAL_SERVER_ERROR);
     }
   }
 
@@ -196,9 +193,7 @@ export class DriverLocationService {
    *
    * @throws {AppError} 400 — invalid driver id or coordinates.
    */
-  public async upsertDriverLocation(
-    input: UpsertDriverLocationInput,
-  ): Promise<IDriverLocation> {
+  public async upsertDriverLocation(input: UpsertDriverLocationInput): Promise<IDriverLocation> {
     const driverId = this.assertValidObjectId(input.driverId, 'driverId');
     const { lat, lng } = this.assertValidCoordinates(input.lat, input.lng);
     const recordedAt = input.recordedAt ?? new Date();
@@ -206,9 +201,7 @@ export class DriverLocationService {
     const update: Record<string, unknown> = {
       location: { type: 'Point', coordinates: [lng, lat] },
       recordedAt,
-      expiresAt: new Date(
-        recordedAt.getTime() + env.DRIVER_LOCATION_STALE_AFTER_SECONDS * 1000,
-      ),
+      expiresAt: new Date(recordedAt.getTime() + env.DRIVER_LOCATION_STALE_AFTER_SECONDS * 1000),
     };
 
     if (input.isAvailable !== undefined) update.isAvailable = input.isAvailable;
@@ -357,16 +350,10 @@ export class DriverLocationService {
   /** Validate a latitude/longitude pair. */
   private assertValidCoordinates(lat: number, lng: number): { lat: number; lng: number } {
     if (!Number.isFinite(lat) || lat < -90 || lat > 90) {
-      throw new AppError(
-        'lat must be a number between -90 and 90.',
-        StatusCodes.BAD_REQUEST,
-      );
+      throw new AppError('lat must be a number between -90 and 90.', StatusCodes.BAD_REQUEST);
     }
     if (!Number.isFinite(lng) || lng < -180 || lng > 180) {
-      throw new AppError(
-        'lng must be a number between -180 and 180.',
-        StatusCodes.BAD_REQUEST,
-      );
+      throw new AppError('lng must be a number between -180 and 180.', StatusCodes.BAD_REQUEST);
     }
     return { lat, lng };
   }

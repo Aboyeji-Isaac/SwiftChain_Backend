@@ -102,7 +102,9 @@ export class WebhookService {
     });
 
     logger.info(
-      `[WebhookService] Registered webhook — merchant=${input.merchantId} id=${String(webhook._id)}`,
+      `[WebhookService] Registered webhook — merchant=${input.merchantId} id=${String(
+        webhook._id,
+      )}`,
     );
 
     return { webhook, secret };
@@ -209,7 +211,9 @@ export class WebhookService {
       const payload = this.buildPayload(delivery, event, status);
 
       await Promise.all(
-        subscriptions.map((webhook) => this.createAndSendAttempt(webhook, event, delivery, payload)),
+        subscriptions.map((webhook) =>
+          this.createAndSendAttempt(webhook, event, delivery, payload),
+        ),
       );
     } catch (error) {
       const message = error instanceof Error ? error.message : 'Unknown error';
@@ -312,7 +316,9 @@ export class WebhookService {
         attempt.nextRetryAt = this.computeNextRetry(attemptNumber);
         logger.warn(
           `[WebhookService] Delivery failed, will retry — webhook=${String(webhook._id)} ` +
-            `event=${attempt.event} attempt=${attemptNumber} nextRetryAt=${attempt.nextRetryAt.toISOString()}: ${message}`,
+            `event=${
+              attempt.event
+            } attempt=${attemptNumber} nextRetryAt=${attempt.nextRetryAt.toISOString()}: ${message}`,
         );
       }
 

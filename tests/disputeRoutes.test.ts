@@ -44,8 +44,7 @@ afterAll(async () => {
 
 const JWT_SECRET = 'test-secret-key-16chars';
 
-const signToken = (userId: string): string =>
-  jwt.sign({ id: userId }, JWT_SECRET, { expiresIn: '1h' });
+const signToken = (userId: string): string => jwt.sign({ userId }, JWT_SECRET, { expiresIn: '1h' });
 
 const createUser = async (role: UserRole): Promise<InstanceType<typeof User>> =>
   User.create({

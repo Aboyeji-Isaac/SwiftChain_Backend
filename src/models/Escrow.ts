@@ -107,17 +107,30 @@ const EscrowTransactionSchema = new Schema<IEscrowTransaction>(
     ledger: { type: Number },
     recordedAt: { type: Date, default: Date.now },
   },
-  { _id: false }
+  { _id: false },
 );
 
 const EscrowSchema = new Schema<IEscrow>(
   {
-    delivery: { type: Schema.Types.ObjectId, ref: 'Delivery', required: true, unique: true, index: true },
-    status: { type: String, enum: Object.values(EscrowStatus), default: EscrowStatus.PENDING, required: true, index: true },
+    delivery: {
+      type: Schema.Types.ObjectId,
+      ref: 'Delivery',
+      required: true,
+      unique: true,
+      index: true,
+    },
+    status: {
+      type: String,
+      enum: Object.values(EscrowStatus),
+      default: EscrowStatus.PENDING,
+      required: true,
+      index: true,
+    },
     amount: { type: Number, required: true, min: 0 },
     assetCode: { type: String, required: true, trim: true, uppercase: true, maxlength: 12 },
     assetIssuer: { type: String, trim: true },
-    contractId: { type: String, trim: true },
+    // Unique: one on-chain escrow contract backs at most one escrow record.
+    contractId: { type: String, trim: true, unique: true, sparse: true },
     payerAddress: { type: String, trim: true },
     payeeAddress: { type: String, trim: true },
     lockTransactionHash: { type: String, trim: true },
@@ -148,7 +161,7 @@ const EscrowSchema = new Schema<IEscrow>(
       },
     },
     toObject: { virtuals: true },
-  }
+  },
 );
 
 // Virtuals
@@ -162,7 +175,8 @@ EscrowSchema.virtual('isSettled').get(function (this: IEscrow) {
 // Ensure transaction hash uniqueness across escrows
 EscrowSchema.index({ 'transactions.hash': 1 }, { unique: true, sparse: true });
 
-const Escrow: Model<IEscrow> = (mongoose.models.Escrow as Model<IEscrow>) || mongoose.model<IEscrow>('Escrow', EscrowSchema);
+const Escrow: Model<IEscrow> =
+  (mongoose.models.Escrow as Model<IEscrow>) || mongoose.model<IEscrow>('Escrow', EscrowSchema);
 
 export default Escrow;
 export { Escrow };

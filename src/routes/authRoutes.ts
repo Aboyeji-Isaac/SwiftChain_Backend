@@ -35,12 +35,7 @@ const router = Router();
  *             schema:
  *               $ref: '#/components/schemas/ErrorResponse'
  */
-router.post(
-  '/login',
-  authLimiter,
-  validate(loginSchema),
-  authController.login
-);
+router.post('/login', authLimiter, validate(loginSchema), authController.login);
 
 /**
  * @openapi

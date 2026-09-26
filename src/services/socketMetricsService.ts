@@ -122,10 +122,10 @@ class SocketMetricsService {
       messagesProcessed: this.messagesProcessed,
       messageLatencyMs: this.latencyWindow.percentiles(),
       memoryUsageBytes: {
-        heapUsedMB: Math.round(memory.heapUsed / 1024 / 1024 * 100) / 100,
-        heapTotalMB: Math.round(memory.heapTotal / 1024 / 1024 * 100) / 100,
-        rssMB: Math.round(memory.rss / 1024 / 1024 * 100) / 100,
-        externalMB: Math.round(memory.external / 1024 / 1024 * 100) / 100,
+        heapUsedMB: Math.round((memory.heapUsed / 1024 / 1024) * 100) / 100,
+        heapTotalMB: Math.round((memory.heapTotal / 1024 / 1024) * 100) / 100,
+        rssMB: Math.round((memory.rss / 1024 / 1024) * 100) / 100,
+        externalMB: Math.round((memory.external / 1024 / 1024) * 100) / 100,
       },
       timestamp: new Date().toISOString(),
     };

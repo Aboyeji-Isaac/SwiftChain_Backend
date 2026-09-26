@@ -61,7 +61,9 @@ export function requireIdempotencyKey(req: Request, res: Response, next: NextFun
 
   // ── 2. Key format validation ──────────────────────────────────────────────
   if (!key || key.trim().length === 0) {
-    next(new AppError('Idempotency-Key header must not be blank.', httpStatus.UNPROCESSABLE_ENTITY));
+    next(
+      new AppError('Idempotency-Key header must not be blank.', httpStatus.UNPROCESSABLE_ENTITY),
+    );
     return;
   }
 
@@ -132,7 +134,10 @@ export function requireIdempotencyKey(req: Request, res: Response, next: NextFun
           logger.error('[Idempotency] Failed to persist response record:', err);
         });
 
-        res.setHeader('Idempotency-Key-Status', statusCode >= 200 && statusCode < 300 ? 'completed' : 'failed');
+        res.setHeader(
+          'Idempotency-Key-Status',
+          statusCode >= 200 && statusCode < 300 ? 'completed' : 'failed',
+        );
         return originalJson(body);
       };
 
