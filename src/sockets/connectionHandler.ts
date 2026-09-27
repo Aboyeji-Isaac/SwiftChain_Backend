@@ -1,5 +1,6 @@
 import { Server as SocketIOServer } from 'socket.io';
 import { Server as HttpServer } from 'http';
+import env from '../config/env';
 import logger from '../config/logger';
 import { socketService } from './socket.service';
 import { registerSyncHandler } from './syncHandler';
@@ -40,15 +41,15 @@ export type TypedServer = SocketIOServer<
 export function initializeSocketServer(httpServer: HttpServer): TypedServer {
   const io: TypedServer = new SocketIOServer(httpServer, {
     cors: {
-      origin: process.env.CORS_ORIGIN || '*',
+      origin: env.CORS_ORIGIN,
       methods: ['GET', 'POST'],
       credentials: true,
     },
     // Use Socket.IO's built-in transport-level ping/pong as a fallback
-    pingTimeout: parseInt(process.env.SOCKET_PING_TIMEOUT_MS ?? '20000', 10),
-    pingInterval: parseInt(process.env.SOCKET_PING_INTERVAL_MS ?? '25000', 10),
+    pingTimeout: env.SOCKET_PING_TIMEOUT_MS,
+    pingInterval: env.SOCKET_PING_INTERVAL_MS,
     // Allow only websocket transport in production for efficiency
-    transports: process.env.NODE_ENV === 'production' ? ['websocket'] : ['websocket', 'polling'],
+    transports: env.NODE_ENV === 'production' ? ['websocket'] : ['websocket', 'polling'],
   });
 
   // ─── Per-connection setup ──────────────────────────────────────────────────

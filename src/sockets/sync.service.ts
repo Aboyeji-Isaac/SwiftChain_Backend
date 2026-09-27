@@ -1,4 +1,5 @@
 import { Types } from 'mongoose';
+import env from '../config/env';
 import logger from '../config/logger';
 import { LocationUpdate, ILocationUpdate } from '../models/LocationUpdate';
 import {
@@ -13,7 +14,7 @@ import {
  * Protects against abusive or runaway clients.
  * Overridable via SYNC_BATCH_SIZE_LIMIT env var.
  */
-const BATCH_SIZE_LIMIT = parseInt(process.env.SYNC_BATCH_SIZE_LIMIT ?? '500', 10);
+const BATCH_SIZE_LIMIT = env.SYNC_BATCH_SIZE_LIMIT;
 
 /**
  * SyncService handles the business logic for offline catch-up sync:

@@ -110,7 +110,7 @@ const connectDB = async (): Promise<void> => {
 };
 
 // Call connectDB but don't listen
-if (process.env.NODE_ENV !== 'test' && !process.env.JEST_WORKER_ID) {
+if (env.NODE_ENV !== 'test' && !process.env.JEST_WORKER_ID) {
   connectDB();
 }
 

@@ -1,5 +1,6 @@
 import mongoose, { Schema } from 'mongoose';
 import bcrypt from 'bcryptjs';
+import env from '../config/env';
 import { IUser, UserRole, UserStatus } from '../interfaces/IUser';
 
 const userSchema = new Schema<IUser>(
@@ -87,8 +88,7 @@ userSchema.pre('save', async function (next) {
   }
 
   try {
-    const rounds = parseInt(process.env.BCRYPT_ROUNDS || '10', 10);
-    const salt = await bcrypt.genSalt(rounds);
+    const salt = await bcrypt.genSalt(env.BCRYPT_ROUNDS);
     this.password = await bcrypt.hash(this.password, salt);
     next();
   } catch (error) {

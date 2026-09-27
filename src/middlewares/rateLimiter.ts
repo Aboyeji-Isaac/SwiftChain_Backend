@@ -1,6 +1,7 @@
 import rateLimit from 'express-rate-limit';
+import env from '../config/env';
 
-const isTest = process.env.NODE_ENV === 'test' || !!process.env.JEST_WORKER_ID;
+const isTest = env.NODE_ENV === 'test' || !!process.env.JEST_WORKER_ID;
 
 /**
  * Strict rate limiter for authentication endpoints (login, register).

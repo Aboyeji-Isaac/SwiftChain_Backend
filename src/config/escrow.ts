@@ -6,6 +6,8 @@
  * separate from the generic Stellar/Soroban RPC config since it identifies
  * a specific contract instance rather than network connection details.
  */
+import env from './env';
+
 export interface EscrowIndexerConfig {
   /** Deployed escrow contract id (Soroban "C..." address). */
   contractId: string;
@@ -15,8 +17,8 @@ export interface EscrowIndexerConfig {
 
 function resolveEscrowIndexerConfig(): EscrowIndexerConfig {
   return {
-    contractId: process.env.ESCROW_CONTRACT_ID?.trim() ?? '',
-    fundedEventTopic: process.env.ESCROW_FUNDED_EVENT_TOPIC?.trim() || 'escrow_funded',
+    contractId: env.ESCROW_CONTRACT_ID,
+    fundedEventTopic: env.ESCROW_FUNDED_EVENT_TOPIC,
   };
 }
 

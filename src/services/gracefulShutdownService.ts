@@ -1,4 +1,5 @@
 import http from 'http';
+import env from '../config/env';
 import logger from '../config/logger';
 import { disconnectDatabase, waitForActiveTransactions } from '../config/database';
 import {
@@ -12,9 +13,6 @@ import {
   shutdownSocketServer,
   TypedServer,
 } from '../sockets/connectionHandler';
-
-/** Default max time (ms) to wait before forcing process exit. */
-const DEFAULT_SHUTDOWN_TIMEOUT_MS = 30_000;
 
 /** Polling interval while waiting for in-flight HTTP / DB work to finish. */
 const DRAIN_POLL_MS = 100;
@@ -51,9 +49,7 @@ export class GracefulShutdownService {
     this.httpServer = options.httpServer;
     this.io = options.io;
     this.exitFn = options.exitFn ?? ((code: number) => process.exit(code));
-    this.timeoutMs =
-      options.timeoutMs ??
-      parseInt(process.env.SHUTDOWN_TIMEOUT_MS ?? String(DEFAULT_SHUTDOWN_TIMEOUT_MS), 10);
+    this.timeoutMs = options.timeoutMs ?? env.SHUTDOWN_TIMEOUT_MS;
   }
 
   /**

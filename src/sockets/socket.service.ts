@@ -1,4 +1,5 @@
 import { Server as SocketIOServer } from 'socket.io';
+import env from '../config/env';
 import logger from '../config/logger';
 import {
   SocketConnectionMeta,
@@ -17,14 +18,14 @@ import { messageQueueService } from './messageQueue';
  * Interval (ms) between server-initiated ping events.
  * Defaults to 25 s, overridable via SOCKET_PING_INTERVAL_MS env var.
  */
-const PING_INTERVAL_MS = parseInt(process.env.SOCKET_PING_INTERVAL_MS ?? '25000', 10);
+const PING_INTERVAL_MS = env.SOCKET_PING_INTERVAL_MS;
 
 /**
  * Maximum number of consecutive missed pongs before a connection is
  * considered stale and forcibly disconnected.
  * Defaults to 2, overridable via SOCKET_MAX_MISSED_PONGS env var.
  */
-const MAX_MISSED_PONGS = parseInt(process.env.SOCKET_MAX_MISSED_PONGS ?? '2', 10);
+const MAX_MISSED_PONGS = env.SOCKET_MAX_MISSED_PONGS;
 
 /**
  * SocketService manages all business-logic concerns for WebSocket

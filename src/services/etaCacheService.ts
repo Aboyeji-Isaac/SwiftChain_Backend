@@ -1,3 +1,4 @@
+import env from '../config/env';
 import logger from '../config/logger';
 import { getRedisClient } from '../config/redis';
 import { buildEtaCacheKey } from '../utils/etaCacheKey';
@@ -83,13 +84,11 @@ export class EtaCacheService {
   }
 
   private readTtlSeconds(): number {
-    const parsed = parseInt(process.env.ETA_CACHE_TTL_SECONDS ?? '600', 10);
-    return Number.isFinite(parsed) && parsed > 0 ? parsed : 600;
+    return env.ETA_CACHE_TTL_SECONDS;
   }
 
   private readGeohashPrecision(): number {
-    const parsed = parseInt(process.env.ETA_GEOHASH_PRECISION ?? '7', 10);
-    return Number.isFinite(parsed) && parsed >= 1 && parsed <= 12 ? parsed : 7;
+    return env.ETA_GEOHASH_PRECISION;
   }
 }
 

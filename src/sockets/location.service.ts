@@ -1,5 +1,6 @@
 import { Types } from 'mongoose';
 import { Server as SocketIOServer } from 'socket.io';
+import env from '../config/env';
 import logger from '../config/logger';
 import { LocationUpdate } from '../models/LocationUpdate';
 import { redisClient } from '../config/redis';
@@ -24,21 +25,21 @@ export const DELIVERY_ROOM_PREFIX = 'delivery:';
  * Updates with the same deduplication key within this window are rejected.
  * Default: 60 seconds (can be overridden via LOCATION_DEDUP_TTL_SECONDS env var).
  */
-const DEDUP_TTL_SECONDS = parseInt(process.env.LOCATION_DEDUP_TTL_SECONDS ?? '60', 10);
+const DEDUP_TTL_SECONDS = env.LOCATION_DEDUP_TTL_SECONDS;
 
 /**
  * Maximum age (in milliseconds) for a location update to be considered valid.
  * Updates older than this are rejected as stale.
  * Default: 5 minutes (can be overridden via LOCATION_MAX_AGE_MS env var).
  */
-const MAX_UPDATE_AGE_MS = parseInt(process.env.LOCATION_MAX_AGE_MS ?? '300000', 10);
+const MAX_UPDATE_AGE_MS = env.LOCATION_MAX_AGE_MS;
 
 /**
  * Maximum future timestamp tolerance (in milliseconds).
  * Updates with timestamps more than this far in the future are rejected.
  * Default: 30 seconds (can be overridden via LOCATION_MAX_FUTURE_MS env var).
  */
-const MAX_FUTURE_TOLERANCE_MS = parseInt(process.env.LOCATION_MAX_FUTURE_MS ?? '30000', 10);
+const MAX_FUTURE_TOLERANCE_MS = env.LOCATION_MAX_FUTURE_MS;
 
 /**
  * Build the canonical Socket.IO room name for a delivery.

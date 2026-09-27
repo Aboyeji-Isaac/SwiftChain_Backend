@@ -1,4 +1,5 @@
 import { randomUUID } from 'crypto';
+import env from '../config/env';
 
 export interface QueuedSocketMessage<T = unknown> {
   id: string;
@@ -20,10 +21,7 @@ export interface EnqueueSocketMessageOptions<T = unknown> {
 
 export class MessageQueueService {
   private readonly queues = new Map<string, QueuedSocketMessage[]>();
-  private readonly defaultAckTimeoutMs = parseInt(
-    process.env.SOCKET_MESSAGE_ACK_TIMEOUT_MS ?? '15000',
-    10,
-  );
+  private readonly defaultAckTimeoutMs = env.SOCKET_MESSAGE_ACK_TIMEOUT_MS;
 
   public enqueue<T = unknown>(
     userId: string,
