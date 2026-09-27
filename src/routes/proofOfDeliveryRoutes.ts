@@ -18,7 +18,9 @@ const upload = multer({
   storage: multer.memoryStorage(),
   limits: { fileSize: env.PROOF_OF_DELIVERY_MAX_SIZE_MB * 1024 * 1024 },
   fileFilter: (_req, file, cb) => {
-    if (!ALLOWED_PROOF_MIME_TYPES.includes(file.mimetype as (typeof ALLOWED_PROOF_MIME_TYPES)[number])) {
+    if (
+      !ALLOWED_PROOF_MIME_TYPES.includes(file.mimetype as (typeof ALLOWED_PROOF_MIME_TYPES)[number])
+    ) {
       cb(
         new AppError(
           `Unsupported file type "${file.mimetype}".`,

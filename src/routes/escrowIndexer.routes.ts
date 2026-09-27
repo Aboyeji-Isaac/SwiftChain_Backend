@@ -49,9 +49,8 @@ const router = Router();
  *       400:
  *         description: Invalid escrowId
  */
-router.get(
-  '/escrows/:escrowId',
-  (req, res, next) => escrowIndexerController.getEscrowStatus(req, res, next),
+router.get('/escrows/:escrowId', (req, res, next) =>
+  escrowIndexerController.getEscrowStatus(req, res, next),
 );
 
 /**
@@ -104,9 +103,8 @@ router.get(
  *       400:
  *         description: Invalid parameters
  */
-router.post(
-  '/escrows/sync/released',
-  (req, res, next) => escrowIndexerController.syncReleased(req, res, next),
+router.post('/escrows/sync/released', (req, res, next) =>
+  escrowIndexerController.syncReleased(req, res, next),
 );
 
 /**
@@ -159,9 +157,8 @@ router.post(
  *       400:
  *         description: Invalid parameters
  */
-router.post(
-  '/escrows/sync/refunded',
-  (req, res, next) => escrowIndexerController.syncRefunded(req, res, next),
+router.post('/escrows/sync/refunded', (req, res, next) =>
+  escrowIndexerController.syncRefunded(req, res, next),
 );
 
 export default router;

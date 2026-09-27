@@ -226,9 +226,7 @@ DriverLocationSchema.index(
  */
 DriverLocationSchema.pre('validate', function (this: IDriverLocation) {
   const recordedAt = this.recordedAt ?? new Date();
-  this.expiresAt = new Date(
-    recordedAt.getTime() + env.DRIVER_LOCATION_STALE_AFTER_SECONDS * 1000,
-  );
+  this.expiresAt = new Date(recordedAt.getTime() + env.DRIVER_LOCATION_STALE_AFTER_SECONDS * 1000);
 });
 
 // ─── Methods ──────────────────────────────────────────────────────────────────

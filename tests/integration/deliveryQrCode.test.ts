@@ -5,7 +5,7 @@
 
 import request from 'supertest';
 import mongoose from 'mongoose';
-import { app } from '../../src/app';
+import app from '../../src/app';
 import Delivery, { DeliveryStatus } from '../../src/models/Delivery';
 import { generateQrToken, verifyQrToken } from '../../src/utils/qrToken';
 
@@ -18,21 +18,19 @@ beforeAll(async () => {
   await mongoose.connect(MONGO_URI);
 
   // Get real auth token from login
-  const loginRes = await request(app)
-    .post('/api/v1/auth/login')
-    .send({
-      email: process.env.TEST_USER_EMAIL,
-      password: process.env.TEST_USER_PASSWORD,
-    });
+  const loginRes = await request(app).post('/api/v1/auth/login').send({
+    email: process.env.TEST_USER_EMAIL,
+    password: process.env.TEST_USER_PASSWORD,
+  });
   authToken = loginRes.body.data?.token || loginRes.body.token;
 
   // Find or create a delivery in eligible status (IN_PROGRESS)
-  let delivery = await Delivery.findOne({
+  let delivery: Record<string, unknown> | null = await Delivery.findOne({
     status: DeliveryStatus.IN_PROGRESS,
   }).lean();
 
   if (!delivery) {
-    delivery = await Delivery.create({
+    const created = await Delivery.create({
       status: DeliveryStatus.IN_PROGRESS,
       trackingNumber: `TEST-QR-${Date.now()}`,
       customer: {
@@ -52,8 +50,12 @@ beforeAll(async () => {
       deliveryFee: 50,
       escrowAmount: 100,
     });
+    delivery = created.toObject() as Record<string, unknown>;
   }
-  testDeliveryId = (delivery._id || delivery.id).toString();
+  if (!delivery) throw new Error('Failed to create/find test delivery');
+  testDeliveryId = (
+    (delivery._id as mongoose.Types.ObjectId) ?? (delivery.id as string)
+  ).toString();
 });
 
 afterAll(async () => {

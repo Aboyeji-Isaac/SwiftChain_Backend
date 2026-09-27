@@ -223,7 +223,9 @@ export class AssignmentService {
       } catch (error) {
         const message = error instanceof Error ? error.message : 'Unknown error';
         logger.warn(
-          `[AssignmentService] Auto-assignment failed for delivery=${String(delivery._id)}: ${message}`,
+          `[AssignmentService] Auto-assignment failed for delivery=${String(
+            delivery._id,
+          )}: ${message}`,
         );
       }
     }

@@ -370,13 +370,14 @@ describe('GET /api/v1/health', () => {
 
   // ── Route registration sanity check ──────────────────────────────────────
 
-  it('is reachable at /api/v1/health (not at the old /health path)', async () => {
+  it('is reachable at /api/v1/health, with /health as a liveness probe', async () => {
     const versioned = await request(app).get('/api/v1/health');
     expect(versioned.status).not.toBe(404);
 
+    // The flat /health path remains as a lightweight liveness probe for load
+    // balancers; the comprehensive check lives at /api/v1/health.
     const legacy = await request(app).get('/health');
-    // The old flat /health stub has been removed; this should 404 now.
-    expect(legacy.status).toBe(404);
+    expect(legacy.status).toBe(200);
   });
 
   // ── Existing circuit-breakers sub-route is still intact ──────────────────

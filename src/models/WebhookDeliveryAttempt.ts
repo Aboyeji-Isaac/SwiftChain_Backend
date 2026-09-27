@@ -40,7 +40,12 @@ export interface IWebhookDeliveryAttemptModel extends Model<IWebhookDeliveryAtte
 
 const WebhookDeliveryAttemptSchema = new Schema<IWebhookDeliveryAttempt>(
   {
-    webhook: { type: Schema.Types.ObjectId, ref: 'WebhookSubscription', required: true, index: true },
+    webhook: {
+      type: Schema.Types.ObjectId,
+      ref: 'WebhookSubscription',
+      required: true,
+      index: true,
+    },
     merchantId: { type: Schema.Types.ObjectId, ref: 'User', required: true },
     event: { type: String, enum: Object.values(WebhookEvent), required: true },
     delivery: { type: Schema.Types.ObjectId, ref: 'Delivery', required: true, index: true },

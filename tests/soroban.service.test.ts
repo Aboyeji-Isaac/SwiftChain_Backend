@@ -36,13 +36,20 @@ jest.mock('../src/config/stellar', () => ({
   createSorobanRpcClient: jest.fn(),
 }));
 
-// Keep retry backoff delays effectively instant so retry tests run fast.
+// Keep retry backoff delays effectively instant so retry tests run fast, and
+// configure the Soroban circuit breaker with a high volume threshold so a
+// single failure cannot trip it (breakers stay CLOSED in these unit tests).
 jest.mock('../src/config/env', () => ({
   __esModule: true,
   default: {
     SOROBAN_RPC_MAX_RETRIES: 3,
     SOROBAN_RPC_RETRY_BASE_MS: 1,
     SOROBAN_RPC_RETRY_MAX_MS: 2,
+    CB_SOROBAN_ERROR_THRESHOLD_PERCENTAGE: 50,
+    CB_SOROBAN_ROLLING_WINDOW_MS: 10000,
+    CB_SOROBAN_RESET_TIMEOUT_MS: 30000,
+    CB_SOROBAN_VOLUME_THRESHOLD: 100,
+    CB_SOROBAN_TIMEOUT_MS: 10000,
   },
 }));
 
@@ -197,8 +204,12 @@ describe('SorobanService', () => {
 
       const info = await service.getNetworkInfo();
 
-      expect(info.passphrase).toBe('Test SDF Network ; September 2015');
-      expect(info.protocolVersion).toBe(21);
+      // The service can return a DegradedLedgerResult when the breaker is
+      // open; with a healthy mock client the raw network response comes back.
+      expect((info as StellarRpc.Api.GetNetworkResponse).passphrase).toBe(
+        'Test SDF Network ; September 2015',
+      );
+      expect((info as StellarRpc.Api.GetNetworkResponse).protocolVersion).toBe(21);
     });
 
     it('propagates errors from the RPC client', async () => {

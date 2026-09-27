@@ -84,7 +84,9 @@ export class ProofOfDeliveryService {
 
     if (!ALLOWED_PROOF_MIME_TYPES.includes(mimeType as (typeof ALLOWED_PROOF_MIME_TYPES)[number])) {
       throw new AppError(
-        `Unsupported file type "${mimeType}". Allowed types: ${ALLOWED_PROOF_MIME_TYPES.join(', ')}.`,
+        `Unsupported file type "${mimeType}". Allowed types: ${ALLOWED_PROOF_MIME_TYPES.join(
+          ', ',
+        )}.`,
         StatusCodes.UNSUPPORTED_MEDIA_TYPE,
       );
     }
@@ -98,7 +100,11 @@ export class ProofOfDeliveryService {
     }
 
     const driver = getStorageDriver();
-    const stored = await driver.upload(buffer, `proof-of-delivery/${deliveryId}/${originalName}`, mimeType);
+    const stored = await driver.upload(
+      buffer,
+      `proof-of-delivery/${deliveryId}/${originalName}`,
+      mimeType,
+    );
 
     const proofOfDelivery: IProofOfDelivery = {
       storageKey: stored.key,

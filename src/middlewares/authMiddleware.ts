@@ -27,7 +27,10 @@ export const authMiddleware = (
 
   if (!authHeader || !authHeader.startsWith('Bearer ')) {
     next(
-      new AppError('Authentication required. Please provide a valid Bearer token.', StatusCodes.UNAUTHORIZED),
+      new AppError(
+        'Authentication required. Please provide a valid Bearer token.',
+        StatusCodes.UNAUTHORIZED,
+      ),
     );
     return;
   }

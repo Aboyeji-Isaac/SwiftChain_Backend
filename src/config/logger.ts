@@ -23,7 +23,9 @@
 
 import winston from 'winston';
 import DailyRotateFile from 'winston-daily-rotate-file';
-import type { TransformableInfo } from 'logform';
+// pnpm's strict layout does not expose `logform` at the project root, so the
+// info shape is taken from winston's own re-export of the package.
+type TransformableInfo = winston.Logform.TransformableInfo;
 import env from './env';
 import { maskValue, maskString } from '../utils/piiMasker';
 
@@ -78,9 +80,7 @@ const maskPiiFormat = winston.format((info) => {
 
     for (const key of Object.keys(info)) {
       if (key === 'message' || key === 'level' || key === 'timestamp') continue;
-      (info as Record<string, unknown>)[key] = maskValue(
-        (info as Record<string, unknown>)[key],
-      );
+      (info as Record<string, unknown>)[key] = maskValue((info as Record<string, unknown>)[key]);
     }
 
     // `splat` holds the extra arguments passed to logger.info(msg, a, b, …).
@@ -164,9 +164,7 @@ function createRotatingTransport(filename: string, level?: string): DailyRotateF
   });
 }
 
-const transports: winston.transport[] = [
-  new winston.transports.Console({ format: consoleFormat }),
-];
+const transports: winston.transport[] = [new winston.transports.Console({ format: consoleFormat })];
 
 // File transports are skipped when disabled, and in tests, so unit runs do not
 // leave log files behind or hold open file handles after the suite ends.

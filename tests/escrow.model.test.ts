@@ -8,7 +8,7 @@
 
 import mongoose, { Types } from 'mongoose';
 import { MongoMemoryServer } from 'mongodb-memory-server';
-import Escrow, { EscrowLockStatus } from '../src/models/Escrow';
+import Escrow, { EscrowStatus } from '../src/models/Escrow';
 
 describe('Escrow model', () => {
   let mongod: MongoMemoryServer;
@@ -32,10 +32,10 @@ describe('Escrow model', () => {
       delivery: new Types.ObjectId(),
       contractId: 'CCONTRACT1',
       amount: 100,
-      asset: 'USDC',
+      assetCode: 'USDC',
     });
 
-    expect(escrow.lockStatus).toBe(EscrowLockStatus.PENDING);
+    expect(escrow.status).toBe(EscrowStatus.PENDING);
     expect(escrow.transactions).toHaveLength(0);
     expect(escrow.createdAt).toBeInstanceOf(Date);
     expect(escrow.updatedAt).toBeInstanceOf(Date);
@@ -46,7 +46,7 @@ describe('Escrow model', () => {
       delivery: new Types.ObjectId(),
       contractId: 'CDUPLICATE',
       amount: 50,
-      asset: 'XLM',
+      assetCode: 'XLM',
     });
 
     await expect(
@@ -54,7 +54,7 @@ describe('Escrow model', () => {
         delivery: new Types.ObjectId(),
         contractId: 'CDUPLICATE',
         amount: 75,
-        asset: 'XLM',
+        assetCode: 'XLM',
       }),
     ).rejects.toThrow();
   });
@@ -65,7 +65,7 @@ describe('Escrow model', () => {
         delivery: new Types.ObjectId(),
         contractId: 'CNEGATIVE',
         amount: -10,
-        asset: 'XLM',
+        assetCode: 'XLM',
       }),
     ).rejects.toThrow();
   });
@@ -79,8 +79,8 @@ describe('Escrow model', () => {
       delivery: new Types.ObjectId(),
       contractId: 'CTX1',
       amount: 200,
-      asset: 'USDC',
-      lockStatus: EscrowLockStatus.LOCKED,
+      assetCode: 'USDC',
+      status: EscrowStatus.LOCKED,
       transactions: [{ hash: 'abc123', type: 'fund', ledger: 42 }],
     });
 
@@ -95,7 +95,7 @@ describe('Escrow model', () => {
       delivery: new Types.ObjectId(),
       contractId: 'CTX2',
       amount: 10,
-      asset: 'XLM',
+      assetCode: 'XLM',
       transactions: [{ hash: 'shared-hash', type: 'fund' }],
     });
 
@@ -104,7 +104,7 @@ describe('Escrow model', () => {
         delivery: new Types.ObjectId(),
         contractId: 'CTX3',
         amount: 20,
-        asset: 'XLM',
+        assetCode: 'XLM',
         transactions: [{ hash: 'shared-hash', type: 'fund' }],
       }),
     ).rejects.toThrow();

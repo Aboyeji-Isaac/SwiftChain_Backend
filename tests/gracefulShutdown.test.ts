@@ -48,9 +48,7 @@ jest.mock('../src/config/database', () => ({
   connectDatabase: jest.fn(),
 }));
 
-import {
-  GracefulShutdownService,
-} from '../src/services/gracefulShutdownService';
+import { GracefulShutdownService } from '../src/services/gracefulShutdownService';
 import {
   requestTracker,
   beginRequestDrain,

@@ -3,6 +3,8 @@ import authenticate from '../middleware/authenticate';
 import requireRole from '../middleware/requireRole';
 import { suspendUser, getDisputes } from '../controllers/adminController';
 import { getDashboardMetrics } from '../controllers/dashboardController';
+import { dlqController } from '../controllers/dlqController';
+import { listFlaggedEscrows, resolveFlaggedEscrow } from '../controllers/escrowController';
 import { UserRole } from '../interfaces/IUser';
 
 const router = Router();
@@ -263,5 +265,69 @@ router.get('/dlq', dlqController.getDlqEntries);
  *         description: Successfully retried the DLQ entry
  */
 router.post('/dlq/:id/retry', dlqController.retryDlqEntry);
+
+/**
+ * @openapi
+ * /v1/admin/escrows/flagged:
+ *   get:
+ *     tags: [Admin]
+ *     summary: List escrows flagged as expired for admin review
+ *     description: Admin-only. Returns a paginated list of escrows whose lock TTL elapsed.
+ *     security:
+ *       - bearerAuth: []
+ *     parameters:
+ *       - in: query
+ *         name: page
+ *         schema:
+ *           type: integer
+ *         description: 1-based page number (default 1)
+ *       - in: query
+ *         name: limit
+ *         schema:
+ *           type: integer
+ *         description: Items per page (default 20, max 100)
+ *     responses:
+ *       200:
+ *         description: Paginated list of flagged (expired) escrows
+ */
+router.get('/escrows/flagged', listFlaggedEscrows);
+
+/**
+ * @openapi
+ * /v1/admin/escrows/{id}/resolve:
+ *   patch:
+ *     tags: [Admin]
+ *     summary: Resolve a flagged (expired) escrow
+ *     description: Admin-only. Marks a flagged escrow as resolved and records the audit trail.
+ *     security:
+ *       - bearerAuth: []
+ *     parameters:
+ *       - in: path
+ *         name: id
+ *         required: true
+ *         schema:
+ *           type: string
+ *     requestBody:
+ *       required: true
+ *       content:
+ *         application/json:
+ *           schema:
+ *             type: object
+ *             required: [notes]
+ *             properties:
+ *               notes:
+ *                 type: string
+ *                 description: Audit trail description of the resolution
+ *     responses:
+ *       200:
+ *         description: Escrow has been resolved successfully
+ *       400:
+ *         description: Missing or invalid notes / escrow id
+ *       404:
+ *         description: Escrow not found
+ *       409:
+ *         description: Escrow is not in the expired state
+ */
+router.patch('/escrows/:id/resolve', resolveFlaggedEscrow);
 
 export default router;

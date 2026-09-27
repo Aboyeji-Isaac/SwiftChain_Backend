@@ -30,7 +30,8 @@ import User from '../../src/models/User';
 import Delivery from '../../src/models/Delivery';
 import { LocationUpdate } from '../../src/models/LocationUpdate';
 import { registerLocationHandler, deliveryRoom } from '../../src/sockets/locationHandler';
-import { locationService } from '../../src/sockets/location.service';
+import { redisClient } from '../../src/config/redis';
+import {} from '../../src/sockets/location.service';
 import {
   DriverLocationUpdatePayload,
   LocationBroadcastPayload,
@@ -41,7 +42,6 @@ import {
   InterServerEvents,
   SocketData,
 } from '../../src/sockets/socket.types';
-import env from '../../src/config/env';
 
 // ─── Mocks ────────────────────────────────────────────────────────────────────
 
@@ -62,6 +62,7 @@ let mongoServer: MongoMemoryServer;
 
 // Test data
 let driverId: string;
+// eslint-disable-next-line @typescript-eslint/no-unused-vars -- assigned in beforeEach
 let dispatcherId: string;
 let customerId: string;
 let deliveryId: string;
@@ -83,6 +84,17 @@ beforeAll(async () => {
 afterEach(async () => {
   // Clear location updates between tests
   await LocationUpdate.deleteMany({});
+
+  // Redis dedup/stale keys leak across tests (a future-dated capturedAt in
+  // one test poisons location:last:* for later tests) — flush them.
+  try {
+    const keys = await redisClient.keys('location:*');
+    if (keys.length > 0) {
+      await redisClient.del(...keys);
+    }
+  } catch {
+    // Redis unavailable — dedup fails open anyway.
+  }
 });
 
 afterAll(async () => {
@@ -107,13 +119,13 @@ async function seedTestData(): Promise<void> {
   });
   driverId = driver._id.toString();
 
-  // Create dispatcher
+  // Create dispatcher (admin role — UserRole has no 'dispatcher' value)
   const dispatcher = await User.create({
     firstName: 'Test',
     lastName: 'Dispatcher',
     email: 'dispatcher.socket@test.com',
     password: 'hashed_password',
-    role: 'dispatcher',
+    role: 'admin',
   });
   dispatcherId = dispatcher._id.toString();
 
@@ -123,7 +135,7 @@ async function seedTestData(): Promise<void> {
     lastName: 'Customer',
     email: 'customer.socket@test.com',
     password: 'hashed_password',
-    role: 'customer',
+    role: 'user',
   });
   customerId = customer._id.toString();
 
@@ -252,18 +264,24 @@ describe('Socket.io Driver Location Events — E2E Integration Tests', () => {
       const room = deliveryRoom(deliveryId);
       const broadcastFn = (io as any)._broadcastMap.get(room);
 
-      expect(broadcastFn).toHaveBeenCalledWith('location:update', expect.objectContaining({
-        deliveryId,
-        driverId,
-        lat: 6.6753,
-        lng: 3.1357,
-      }) as LocationBroadcastPayload);
+      expect(broadcastFn).toHaveBeenCalledWith(
+        'location:update',
+        expect.objectContaining({
+          deliveryId,
+          driverId,
+          lat: 6.6753,
+          lng: 3.1357,
+        }) as LocationBroadcastPayload,
+      );
 
       // Verify ack was sent back
-      expect(driverSocket.emit).toHaveBeenCalledWith('location_update_ack', expect.objectContaining({
-        success: true,
-        locationId: expect.any(String),
-      }) as LocationUpdateAck);
+      expect(driverSocket.emit).toHaveBeenCalledWith(
+        'location_update_ack',
+        expect.objectContaining({
+          success: true,
+          locationId: expect.any(String),
+        }) as LocationUpdateAck,
+      );
     });
 
     it('location update is persisted to MongoDB', async () => {
@@ -296,9 +314,9 @@ describe('Socket.io Driver Location Events — E2E Integration Tests', () => {
 
       // Query MongoDB for the persisted location
       const locationDoc = await LocationUpdate.findById(locationId);
-      expect(locationDoc).toBeDefined();
+      expect(locationDoc).not.toBeNull();
       expect(locationDoc!.driverId.toString()).toBe(driverId);
-      expect(locationDoc!.deliveryId.toString()).toBe(deliveryId);
+      expect(locationDoc!.deliveryId?.toString()).toBe(deliveryId);
       expect(locationDoc!.coordinates.lat).toBe(6.6753);
       expect(locationDoc!.coordinates.lng).toBe(3.1357);
       expect(locationDoc!.isOfflineSync).toBe(false);
@@ -369,10 +387,13 @@ describe('Socket.io Driver Location Events — E2E Integration Tests', () => {
       await handler(updatePayload);
 
       // Should emit error ack
-      expect(driverSocket.emit).toHaveBeenCalledWith('location_update_ack', expect.objectContaining({
-        success: false,
-        error: expect.stringContaining('Authentication required'),
-      }) as LocationUpdateAck);
+      expect(driverSocket.emit).toHaveBeenCalledWith(
+        'location_update_ack',
+        expect.objectContaining({
+          success: false,
+          error: expect.stringContaining('Authentication required'),
+        }) as LocationUpdateAck,
+      );
     });
 
     it('rejects payload with missing deliveryId', async () => {
@@ -392,10 +413,13 @@ describe('Socket.io Driver Location Events — E2E Integration Tests', () => {
 
       await handler(updatePayload);
 
-      expect(driverSocket.emit).toHaveBeenCalledWith('location_update_ack', expect.objectContaining({
-        success: false,
-        error: expect.any(String),
-      }) as LocationUpdateAck);
+      expect(driverSocket.emit).toHaveBeenCalledWith(
+        'location_update_ack',
+        expect.objectContaining({
+          success: false,
+          error: expect.any(String),
+        }) as LocationUpdateAck,
+      );
     });
 
     it('rejects payload with invalid lat/lng range', async () => {
@@ -416,10 +440,13 @@ describe('Socket.io Driver Location Events — E2E Integration Tests', () => {
 
       await handler(updatePayload);
 
-      expect(driverSocket.emit).toHaveBeenCalledWith('location_update_ack', expect.objectContaining({
-        success: false,
-        error: expect.stringContaining('range'),
-      }) as LocationUpdateAck);
+      expect(driverSocket.emit).toHaveBeenCalledWith(
+        'location_update_ack',
+        expect.objectContaining({
+          success: false,
+          error: expect.stringContaining('range'),
+        }) as LocationUpdateAck,
+      );
     });
 
     it('rejects payload with non-numeric lat/lng', async () => {
@@ -440,9 +467,12 @@ describe('Socket.io Driver Location Events — E2E Integration Tests', () => {
 
       await handler(updatePayload);
 
-      expect(driverSocket.emit).toHaveBeenCalledWith('location_update_ack', expect.objectContaining({
-        success: false,
-      }) as LocationUpdateAck);
+      expect(driverSocket.emit).toHaveBeenCalledWith(
+        'location_update_ack',
+        expect.objectContaining({
+          success: false,
+        }) as LocationUpdateAck,
+      );
     });
 
     it('rejects malformed payload (null/undefined)', async () => {
@@ -457,9 +487,12 @@ describe('Socket.io Driver Location Events — E2E Integration Tests', () => {
 
       await handler(null);
 
-      expect(driverSocket.emit).toHaveBeenCalledWith('location_update_ack', expect.objectContaining({
-        success: false,
-      }) as LocationUpdateAck);
+      expect(driverSocket.emit).toHaveBeenCalledWith(
+        'location_update_ack',
+        expect.objectContaining({
+          success: false,
+        }) as LocationUpdateAck,
+      );
     });
 
     it('rejects update with timestamp too far in the past', async () => {
@@ -481,10 +514,13 @@ describe('Socket.io Driver Location Events — E2E Integration Tests', () => {
 
       await handler(updatePayload);
 
-      expect(driverSocket.emit).toHaveBeenCalledWith('location_update_ack', expect.objectContaining({
-        success: false,
-        error: expect.stringContaining('old'),
-      }) as LocationUpdateAck);
+      expect(driverSocket.emit).toHaveBeenCalledWith(
+        'location_update_ack',
+        expect.objectContaining({
+          success: false,
+          error: expect.stringContaining('old'),
+        }) as LocationUpdateAck,
+      );
     });
 
     it('rejects update with timestamp too far in the future', async () => {
@@ -506,10 +542,13 @@ describe('Socket.io Driver Location Events — E2E Integration Tests', () => {
 
       await handler(updatePayload);
 
-      expect(driverSocket.emit).toHaveBeenCalledWith('location_update_ack', expect.objectContaining({
-        success: false,
-        error: expect.stringContaining('future'),
-      }) as LocationUpdateAck);
+      expect(driverSocket.emit).toHaveBeenCalledWith(
+        'location_update_ack',
+        expect.objectContaining({
+          success: false,
+          error: expect.stringContaining('future'),
+        }) as LocationUpdateAck,
+      );
     });
   });
 
@@ -677,9 +716,10 @@ describe('Socket.io Driver Location Events — E2E Integration Tests', () => {
       });
 
       expect(locations).toHaveLength(3);
+      // Payloads step by 0.0001 (see lat: 6.6753 + i * 0.0001 above).
       expect(locations[0].coordinates.lat).toBeCloseTo(6.6753, 5);
-      expect(locations[1].coordinates.lat).toBeCloseTo(6.67531, 5);
-      expect(locations[2].coordinates.lat).toBeCloseTo(6.67532, 5);
+      expect(locations[1].coordinates.lat).toBeCloseTo(6.6754, 5);
+      expect(locations[2].coordinates.lat).toBeCloseTo(6.6755, 5);
     });
 
     it('broadcasts location updates to the correct delivery room', async () => {
@@ -705,12 +745,15 @@ describe('Socket.io Driver Location Events — E2E Integration Tests', () => {
       const room = deliveryRoom(deliveryId);
       const broadcastFn = (io as any)._broadcastMap.get(room);
 
-      expect(broadcastFn).toHaveBeenCalledWith('location:update', expect.objectContaining({
-        deliveryId,
-        driverId,
-        lat: 6.6753,
-        lng: 3.1357,
-      }) as LocationBroadcastPayload);
+      expect(broadcastFn).toHaveBeenCalledWith(
+        'location:update',
+        expect.objectContaining({
+          deliveryId,
+          driverId,
+          lat: 6.6753,
+          lng: 3.1357,
+        }) as LocationBroadcastPayload,
+      );
     });
   });
 });

@@ -171,14 +171,9 @@ export class NotificationService {
       throw new AppError('Invalid delivery ID', httpStatus.BAD_REQUEST);
     }
 
-    const normalizedStatus = Object.values(DeliveryStatus).find(
-      (value) => value === event.status,
-    );
+    const normalizedStatus = Object.values(DeliveryStatus).find((value) => value === event.status);
     if (!normalizedStatus) {
-      throw new AppError(
-        `Unknown delivery status '${event.status}'`,
-        httpStatus.BAD_REQUEST,
-      );
+      throw new AppError(`Unknown delivery status '${event.status}'`, httpStatus.BAD_REQUEST);
     }
 
     const updated = await Delivery.findByIdAndUpdate(
@@ -210,8 +205,9 @@ export class NotificationService {
       this.websocketNotifier(delivery, status, transactionHash);
     } catch (error) {
       logger.error(
-        `[NotificationService] WebSocket notification failed for delivery=${String(delivery._id)}: ` +
-          (error instanceof Error ? error.message : 'Unknown error'),
+        `[NotificationService] WebSocket notification failed for delivery=${String(
+          delivery._id,
+        )}: ` + (error instanceof Error ? error.message : 'Unknown error'),
       );
     }
   }

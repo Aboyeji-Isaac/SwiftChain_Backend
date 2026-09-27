@@ -28,6 +28,28 @@ interface EnvConfig {
   PROFILE_PICTURE_HEIGHT?: string;
   PROFILE_PICTURE_QUALITY?: string;
 
+  // ── Uploads / evidence storage ─────────────────────────────────────────────
+  /** Public base URL used to build links to locally stored uploads. Default: http://localhost:3000 */
+  APP_BASE_URL: string;
+  /** Maximum accepted evidence upload size, in MB. Default: 10 */
+  UPLOAD_MAX_FILE_SIZE_MB: number;
+  /** AWS region for the S3 upload driver. Default: us-east-1 */
+  AWS_REGION: string;
+  /** AWS access key id. Blank falls back to the provider credential chain. */
+  AWS_ACCESS_KEY_ID: string;
+  /** AWS secret access key. Blank falls back to the provider credential chain. */
+  AWS_SECRET_ACCESS_KEY: string;
+  /** Lifetime (s) of S3 pre-signed download URLs. Default: 900 */
+  AWS_S3_SIGNED_URL_EXPIRES_SECONDS: number;
+
+  // ── Indexer lag monitoring ─────────────────────────────────────────────────
+  /** Ledger gap at which an indexer-lag alert is raised. Default: 100 */
+  INDEXER_LAG_ALERT_THRESHOLD: number;
+  /** Interval (ms) between background indexer-lag checks. Default: 60000 */
+  INDEXER_LAG_CHECK_INTERVAL_MS: number;
+  /** Webhook notified when an indexer-lag alert fires. Blank disables the call. */
+  INDEXER_LAG_WEBHOOK_URL: string;
+
   // ── Soroban RPC retry config ────────────────────────────────────────────────
   /** Maximum attempts (including the first) for generic RPC retries. Default: 3 */
   SOROBAN_RPC_MAX_RETRIES: number;
@@ -102,6 +124,8 @@ interface EnvConfig {
   SHUTDOWN_TIMEOUT_MS: number;
   /** Cron expression driving the escrow monitor job. Default: every 5 minutes */
   ESCROW_MONITOR_CRON: string;
+  /** Lock TTL (s) after which a still-locked escrow is flagged as expired. Default: 86400 (24h) */
+  ESCROW_LOCK_TTL_SECONDS: number;
 
   // ── Stellar / Soroban network ─────────────────────────────────
   /** Target Stellar network. Default: testnet */
@@ -203,6 +227,19 @@ const envSchema = z.object({
   PROFILE_PICTURE_HEIGHT: z.string().optional(),
   PROFILE_PICTURE_QUALITY: z.string().optional(),
 
+  // ── Uploads / evidence storage ─────────────────────────────────────────────
+  APP_BASE_URL: z.string().trim().default('http://localhost:3000'),
+  UPLOAD_MAX_FILE_SIZE_MB: z.coerce.number().int().min(1).max(100).default(10),
+  AWS_REGION: z.string().trim().default('us-east-1'),
+  AWS_ACCESS_KEY_ID: z.string().trim().default(''),
+  AWS_SECRET_ACCESS_KEY: z.string().trim().default(''),
+  AWS_S3_SIGNED_URL_EXPIRES_SECONDS: z.coerce.number().int().min(1).default(900),
+
+  // ── Indexer lag monitoring ─────────────────────────────────────────────────
+  INDEXER_LAG_ALERT_THRESHOLD: z.coerce.number().int().min(1).default(100),
+  INDEXER_LAG_CHECK_INTERVAL_MS: z.coerce.number().int().min(1000).default(60000),
+  INDEXER_LAG_WEBHOOK_URL: z.string().trim().default(''),
+
   // ── Soroban RPC retry config ────────────────────────────────────────────────
   SOROBAN_RPC_MAX_RETRIES: z.coerce.number().int().min(1).max(20).default(3),
   SOROBAN_RPC_RETRY_BASE_MS: z.coerce.number().int().min(50).default(250),
@@ -216,7 +253,11 @@ const envSchema = z.object({
   FCM_REQUEST_TIMEOUT_MS: z.coerce.number().int().min(1000).default(10000),
 
   // ── Bulk delivery CSV import ────────────────────────────────────────────────
-  BULK_UPLOAD_MAX_BYTES: z.coerce.number().int().min(1024).default(5 * 1024 * 1024),
+  BULK_UPLOAD_MAX_BYTES: z.coerce
+    .number()
+    .int()
+    .min(1024)
+    .default(5 * 1024 * 1024),
   BULK_UPLOAD_MAX_ROWS: z.coerce.number().int().min(1).max(10000).default(1000),
 
   // ── Socket.IO transport tuning ────────────────────────────────────
@@ -245,6 +286,7 @@ const envSchema = z.object({
   // ── Lifecycle / jobs ──────────────────────────────────────────
   SHUTDOWN_TIMEOUT_MS: z.coerce.number().int().min(1000).default(30000),
   ESCROW_MONITOR_CRON: z.string().trim().min(1).default('*/5 * * * *'),
+  ESCROW_LOCK_TTL_SECONDS: z.coerce.number().int().min(1).default(86400),
 
   // ── Stellar / Soroban network ─────────────────────────────────
   STELLAR_NETWORK: z
@@ -324,9 +366,7 @@ if (env.UPLOAD_STORAGE_DRIVER === 's3' && !env.AWS_S3_BUCKET) {
 }
 
 if (env.DRIVER_PROXIMITY_DEFAULT_RADIUS_M > env.DRIVER_PROXIMITY_MAX_RADIUS_M) {
-  console.error(
-    '❌ DRIVER_PROXIMITY_DEFAULT_RADIUS_M cannot exceed DRIVER_PROXIMITY_MAX_RADIUS_M',
-  );
+  console.error('❌ DRIVER_PROXIMITY_DEFAULT_RADIUS_M cannot exceed DRIVER_PROXIMITY_MAX_RADIUS_M');
   process.exit(1);
 }
 

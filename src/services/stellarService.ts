@@ -12,7 +12,7 @@ import { StatusCodes } from 'http-status-codes';
 import { sorobanRpcClient, stellarConfig } from '../config/stellar';
 import { deliveryService } from './delivery.service';
 import { IDelivery } from '../models/Delivery';
-import { toStroops, fromStroops } from '../utils/stroops';
+import { toStroops } from '../utils/stroops';
 import AppError from '../utils/AppError';
 import logger from '../config/logger';
 import env from '../config/env';
@@ -172,9 +172,7 @@ export function isTransientRpcError(error: unknown, kind: AttemptFailureKind = '
  *
  * We check both paths so the guard is robust to SDK / node differences.
  */
-function isBadSeqError(
-  responseOrError: StellarRpc.Api.SendTransactionResponse | unknown,
-): boolean {
+function isBadSeqError(responseOrError: StellarRpc.Api.SendTransactionResponse | unknown): boolean {
   // Path 1: resolved response object
   if (
     typeof responseOrError === 'object' &&
@@ -184,10 +182,22 @@ function isBadSeqError(
     const resp = responseOrError as StellarRpc.Api.SendTransactionResponse;
     if (resp.status !== 'ERROR') return false;
 
-    // Try to decode the errorResultXdr to confirm it's specifically txBAD_SEQ.
-    if (resp.errorResultXdr) {
+    // Try to decode the error result to confirm it's specifically txBAD_SEQ.
+    // SDK v13 exposes the decoded `errorResult` (the raw `errorResultXdr`
+    // string only exists on the raw response variant).
+    const rawResultXdr = (() => {
+      const withRaw = resp as unknown as { errorResultXdr?: string };
+      if (withRaw.errorResultXdr) return withRaw.errorResultXdr;
       try {
-        const result = xdr.TransactionResult.fromXDR(resp.errorResultXdr, 'base64');
+        return resp.errorResult?.toXDR('base64');
+      } catch {
+        return undefined;
+      }
+    })();
+
+    if (rawResultXdr) {
+      try {
+        const result = xdr.TransactionResult.fromXDR(rawResultXdr, 'base64');
         const resultCode = result.result().switch().name;
         if (resultCode === 'txBadSeq') return true;
       } catch {
@@ -204,7 +214,6 @@ function isBadSeqError(
   const msg = extractMessage(responseOrError).toLowerCase();
   return msg.includes('tx_bad_seq') || msg.includes('txbadseq');
 }
-
 
 // ─── StellarService ────────────────────────────────────────────────────────────
 
@@ -397,14 +406,17 @@ export class StellarService {
       }
 
       // ── Other error ───────────────────────────────────────────────────────
-      const errXdr = response.errorResultXdr ?? '(no XDR)';
+      const errXdr =
+        response.errorResult?.toXDR('base64') ??
+        (response as unknown as { errorResultXdr?: string }).errorResultXdr ??
+        '(no XDR)';
       logger.error(
         `[StellarService] Submission failed — status=${response.status} ` +
           `errorResultXdr=${errXdr} payer=${payerAddress}`,
       );
-      
+
       const errorMessage = `Transaction submission failed with status '${response.status}'. Error result XDR: ${errXdr}`;
-      
+
       // Store in Dead Letter Queue (DLQ)
       const { dlqService } = await import('./dlqService');
       await dlqService.addEntry(input, errorMessage).catch((dlqErr) => {
@@ -427,10 +439,7 @@ export class StellarService {
    *
    * @returns Base64 unsigned transaction envelope XDR ready to be signed.
    */
-  public async rebuildWithFreshSequence(
-    deliveryId: string,
-    payerAddress: string,
-  ): Promise<string> {
+  public async rebuildWithFreshSequence(deliveryId: string, payerAddress: string): Promise<string> {
     const contractId = this.requireEscrowContractId();
 
     // Load delivery from DB — data source per acceptance criteria.
@@ -469,9 +478,7 @@ export class StellarService {
   // ── Private helpers ─────────────────────────────────────────────────────────
 
   /** Send a signed XDR to the RPC node. Never throws — returns the response. */
-  private async send(
-    signedXdr: string,
-  ): Promise<StellarRpc.Api.SendTransactionResponse> {
+  private async send(signedXdr: string): Promise<StellarRpc.Api.SendTransactionResponse> {
     try {
       // Deserialise the signed envelope XDR into a Transaction object.
       const tx = TransactionBuilder.fromXDR(
@@ -500,7 +507,10 @@ export class StellarService {
 
       // If the SDK itself throws with bad-seq language surface it as a
       // synthetic response object so the caller's isBadSeqError check works.
-      if (message.toLowerCase().includes('tx_bad_seq') || message.toLowerCase().includes('txbadseq')) {
+      if (
+        message.toLowerCase().includes('tx_bad_seq') ||
+        message.toLowerCase().includes('txbadseq')
+      ) {
         logger.warn(`[StellarService] sendTransaction threw bad-seq: ${message}`);
         return {
           status: 'ERROR',
@@ -529,9 +539,7 @@ export class StellarService {
    * Polls with exponential back-off starting at 500 ms, capped at 5 s, up to
    * `SOROBAN_RPC_MAX_RETRIES * 4` attempts (at least 12 polls by default).
    */
-  private async pollForCompletion(
-    hash: string,
-  ): Promise<{ hash: string; ledger: number }> {
+  private async pollForCompletion(hash: string): Promise<{ hash: string; ledger: number }> {
     const maxPolls = env.SOROBAN_RPC_MAX_RETRIES * 4;
     let delay = 500;
 
@@ -543,14 +551,14 @@ export class StellarService {
       try {
         // Each poll is itself retried, so a momentary blip does not consume a
         // whole polling slot and shorten the confirmation window.
-        txResponse = await this.callRpc(
-          'getTransaction',
-          () => this.client.getTransaction(hash),
-          { hash },
-        );
+        txResponse = await this.callRpc('getTransaction', () => this.client.getTransaction(hash), {
+          hash,
+        });
       } catch (error) {
         logger.warn(
-          `[StellarService] getTransaction poll ${poll}/${maxPolls} failed: ${extractMessage(error)}`,
+          `[StellarService] getTransaction poll ${poll}/${maxPolls} failed: ${extractMessage(
+            error,
+          )}`,
         );
         continue;
       }
@@ -560,10 +568,12 @@ export class StellarService {
       }
 
       if (txResponse.status === StellarRpc.Api.GetTransactionStatus.FAILED) {
-        const resultXdr = (txResponse as { resultXdr?: string }).resultXdr ?? '(no XDR)';
-        logger.error(
-          `[StellarService] Transaction FAILED — hash=${hash} resultXdr=${resultXdr}`,
-        );
+        // SDK v13 returns the decoded TransactionResult on failure responses.
+        const resultXdr =
+          txResponse.resultXdr?.toXDR('base64') ??
+          (txResponse as unknown as { resultXdr?: string }).resultXdr ??
+          '(no XDR)';
+        logger.error(`[StellarService] Transaction FAILED — hash=${hash} resultXdr=${resultXdr}`);
         throw new AppError(
           `Transaction was submitted but failed on-chain. Result XDR: ${resultXdr}`,
           StatusCodes.BAD_GATEWAY,
@@ -623,11 +633,9 @@ export class StellarService {
 
   private async loadAccount(payerAddress: string): Promise<Account> {
     try {
-      return await this.callRpc(
-        'getAccount',
-        () => this.client.getAccount(payerAddress),
-        { payer: payerAddress },
-      );
+      return await this.callRpc('getAccount', () => this.client.getAccount(payerAddress), {
+        payer: payerAddress,
+      });
     } catch (error) {
       const message = extractMessage(error);
 

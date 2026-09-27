@@ -1,6 +1,6 @@
 import cron, { ScheduledTask } from 'node-cron';
 import logger from '../config/logger';
-import { scanForExpiredEscrows } from '../services/escrowService';
+import { escrowService } from '../services/escrow.service';
 import env from '../config/env';
 
 /**
@@ -27,7 +27,7 @@ export const runEscrowExpiryScan = async (): Promise<void> => {
 
   isRunning = true;
   try {
-    const result = await scanForExpiredEscrows();
+    const result = await escrowService.scanForExpiredEscrows();
     if (result.flaggedCount > 0) {
       logger.info(
         `[EscrowMonitor] Scan complete — flagged ${result.flaggedCount} expired escrow(s).`,

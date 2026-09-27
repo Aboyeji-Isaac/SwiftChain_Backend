@@ -11,6 +11,10 @@
  *
  * Architecture:
  * Controllers → Services → Models (Mongoose)
+ *
+ * Token policy: exactly one canonical token per registration (see ./tokens.ts).
+ * Legacy snake_case aliases are intentionally NOT registered so consumers can
+ * never be wired to a duplicate or stale binding.
  */
 
 import { createContainer, InjectionMode, asValue } from 'awilix';
@@ -29,61 +33,58 @@ import Fleet from '../models/Fleet';
 import Escrow from '../models/Escrow';
 import Dispute from '../models/Dispute';
 import EventLog from '../models/EventLog';
-import Evidence from '../models/Evidence';
+import { Evidence } from '../models/Evidence';
 import FleetInvitation from '../models/FleetInvitation';
-import LocationUpdate from '../models/LocationUpdate';
+import { LocationUpdate } from '../models/LocationUpdate';
 import ChatMessage from '../models/ChatMessage';
-import IndexerAlert from '../models/IndexerAlert';
-import IndexerStatus from '../models/IndexerStatus';
+import { IndexerAlert } from '../models/IndexerAlert';
+import { IndexerStatus } from '../models/IndexerStatus';
 import IdempotencyRecord from '../models/IdempotencyRecord';
 
 // ─── Services ──────────────────────────────────────────────────────────────────
 import authService from '../services/authService';
 import { deliveryService } from '../services/deliveryService';
 import { driverService } from '../services/driverService';
-import { fleetService } from '../services/fleetService';
-import escrowService from '../services/escrowService';
-import { disputeService } from '../services/disputeService';
-import adminService from '../services/adminService';
+import * as fleetService from '../services/fleetService';
+import { escrowService } from '../services/escrow.service';
+import * as disputeService from '../services/disputeService';
+import * as adminService from '../services/adminService';
 import dashboardService from '../services/dashboardService';
 import eventLogService from '../services/eventLogService';
-import profilePictureService from '../services/profilePicture.service';
-import storageService from '../services/storage.service';
+import { profilePictureService } from '../services/profilePicture.service';
+import * as storageService from '../services/storage.service';
 import { sorobanService } from '../blockchain/soroban.service';
 import { transactionService } from '../services/transactionService';
-import { escrowMonitorService } from '../services/escrowMonitorService';
+import escrowMonitorService from '../services/escrowMonitorService';
 import { routingService } from '../services/routingService';
-import etaCacheService from '../services/etaCacheService';
-import stellarService from '../services/stellarService';
-import evidenceService from '../services/evidenceService';
-import indexerService from '../services/indexerService';
-import monitorService from '../services/monitorService';
-import idempotencyService from '../services/idempotency.service';
+import { etaCacheService } from '../services/etaCacheService';
+import { stellarService } from '../services/stellarService';
+import * as evidenceService from '../services/evidenceService';
+import { indexerService } from '../services/indexerService';
+import * as monitorService from '../services/monitorService';
+import { idempotencyService } from '../services/idempotency.service';
 
 // ─── Controllers ───────────────────────────────────────────────────────────
 // Import controller singleton instances (already instantiated in their modules)
 import authController from '../controllers/authController';
 import { deliveryController } from '../controllers/delivery.controller';
-import deliveryControllerInstance from '../controllers/deliveryController';
-import { deliveryCrudController } from '../controllers/deliveryCrudController';
-import deliveryStatusController from '../controllers/deliveryStatusController';
+import * as deliveryCrudController from '../controllers/deliveryCrudController';
+import * as deliveryStatusController from '../controllers/deliveryStatusController';
 import { driverController } from '../controllers/driverController';
-import fleetController from '../controllers/fleetController';
+import * as fleetController from '../controllers/fleetController';
 import { escrowController } from '../controllers/escrow.controller';
-import escrowControllerInstance from '../controllers/escrowController';
-import { disputeController } from '../controllers/disputeController';
-import { adminController } from '../controllers/adminController';
+import * as disputeController from '../controllers/disputeController';
+import * as adminController from '../controllers/adminController';
 import dashboardController from '../controllers/dashboardController';
-import { eventLogController } from '../controllers/eventLogController';
-import { profileController } from '../controllers/profileController';
-import { uploadController } from '../controllers/uploadController';
-import { userController } from '../controllers/userController';
+import eventLogController from '../controllers/eventLogController';
+import * as profileController from '../controllers/profileController';
+import * as uploadController from '../controllers/uploadController';
+import userController from '../controllers/userController';
 import { transactionController } from '../controllers/transactionController';
-import circuitBreakerController from '../controllers/circuitBreakerController';
-import indexerController from '../controllers/indexerController';
-import { indexerController as indexerController2 } from '../controllers/indexer.controller';
-import monitorController from '../controllers/monitorController';
-import { stellarController as stellarController2 } from '../controllers/stellar.controller';
+import { circuitBreakerController } from '../controllers/circuitBreakerController';
+import { indexerController } from '../controllers/indexerController';
+import * as monitorController from '../controllers/monitorController';
+import { stellarController } from '../controllers/stellar.controller';
 
 import { TOKENS } from './tokens';
 
@@ -96,14 +97,14 @@ export function createDIContainer(): AwilixContainer {
     injectionMode: InjectionMode.PROXY,
   });
 
-  // ─── Register Config & Infrastructure (Singleton) ──────────────────────────
+  // ─── Register Config & Infrastructure (Singleton) ──────────────────────
   container.register({
     [TOKENS.logger]: asValue(logger),
     [TOKENS.env]: asValue(env),
     [TOKENS.redisClient]: asValue(redisClient),
   });
 
-  // ─── Register Models (Singleton) ────────────────────────────────────────────
+  // ─── Register Models (Singleton) ───────────────────────────────────────
   container.register({
     [TOKENS.userModel]: asValue(User),
     [TOKENS.deliveryModel]: asValue(Delivery),
@@ -121,17 +122,15 @@ export function createDIContainer(): AwilixContainer {
     [TOKENS.idempotencyRecordModel]: asValue(IdempotencyRecord),
   });
 
-  // ─── Register Services (Singleton) ──────────────────────────────────────────
+  // ─── Register Services (Singleton) ─────────────────────────────────────
   // Most services are already instantiated singletons exported from their modules,
-  // so we register them as values rather than classes.
+  // so we register them as values rather than classes. One canonical token each.
   container.register({
     [TOKENS.authService]: asValue(authService),
     [TOKENS.deliveryService]: asValue(deliveryService),
-    [TOKENS.delivery_service]: asValue(deliveryService), // Alternate name
     [TOKENS.driverService]: asValue(driverService),
     [TOKENS.fleetService]: asValue(fleetService),
     [TOKENS.escrowService]: asValue(escrowService),
-    [TOKENS.escrow_service]: asValue(escrowService), // Alternate name
     [TOKENS.disputeService]: asValue(disputeService),
     [TOKENS.adminService]: asValue(adminService),
     [TOKENS.dashboardService]: asValue(dashboardService),
@@ -150,7 +149,7 @@ export function createDIContainer(): AwilixContainer {
     [TOKENS.idempotencyService]: asValue(idempotencyService),
   });
 
-  // ─── Register Controllers (Singleton) ───────────────────────────────────────
+  // ─── Register Controllers (Singleton) ──────────────────────────────────
   // Controllers in this codebase are already instantiated as singletons.
   // They are registered in the container for:
   // 1. Centralized dependency resolution
@@ -159,13 +158,11 @@ export function createDIContainer(): AwilixContainer {
   container.register({
     [TOKENS.authController]: asValue(authController),
     [TOKENS.deliveryController]: asValue(deliveryController),
-    [TOKENS.delivery_controller]: asValue(deliveryController),
     [TOKENS.deliveryCrudController]: asValue(deliveryCrudController),
     [TOKENS.deliveryStatusController]: asValue(deliveryStatusController),
     [TOKENS.driverController]: asValue(driverController),
     [TOKENS.fleetController]: asValue(fleetController),
     [TOKENS.escrowController]: asValue(escrowController),
-    [TOKENS.escrow_controller]: asValue(escrowController),
     [TOKENS.disputeController]: asValue(disputeController),
     [TOKENS.adminController]: asValue(adminController),
     [TOKENS.dashboardController]: asValue(dashboardController),
@@ -176,10 +173,8 @@ export function createDIContainer(): AwilixContainer {
     [TOKENS.transactionController]: asValue(transactionController),
     [TOKENS.circuitBreakerController]: asValue(circuitBreakerController),
     [TOKENS.indexerController]: asValue(indexerController),
-    [TOKENS.indexer_controller]: asValue(indexerController2),
     [TOKENS.monitorController]: asValue(monitorController),
-    [TOKENS.stellarController]: asValue(stellarController2),
-    [TOKENS.stellar_controller]: asValue(stellarController2),
+    [TOKENS.stellarController]: asValue(stellarController),
   });
 
   return container;

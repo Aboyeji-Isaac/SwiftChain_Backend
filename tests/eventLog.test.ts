@@ -52,9 +52,11 @@ describe('EventLog Model & Service', () => {
 
       // Create first event via service
       await eventLogService.createEventLog(eventData);
-      
+
       // Try to create duplicate via service - should throw "Event already exists"
-      await expect(eventLogService.createEventLog(eventData)).rejects.toThrow('Event already exists');
+      await expect(eventLogService.createEventLog(eventData)).rejects.toThrow(
+        'Event already exists',
+      );
     });
 
     it('should require required fields', async () => {
@@ -78,17 +80,14 @@ describe('EventLog Model & Service', () => {
     });
 
     it('should mark event as processed', async () => {
-      const event = await eventLogService.createEventLog({
+      const _event = await eventLogService.createEventLog({
         eventType: 'delivery',
         transactionHash: '0x1234567890abcdef',
         ledgerSequence: 1000,
         status: 'pending',
       });
 
-      const updated = await eventLogService.markAsProcessed(
-        '0x1234567890abcdef',
-        'delivery'
-      );
+      const updated = await eventLogService.markAsProcessed('0x1234567890abcdef', 'delivery');
 
       expect(updated).toBeDefined();
       expect(updated?.status).toBe('processed');
@@ -122,16 +121,10 @@ describe('EventLog Model & Service', () => {
         status: 'pending',
       });
 
-      const exists = await EventLog.eventExists(
-        '0x1234567890abcdef',
-        'delivery'
-      );
+      const exists = await EventLog.eventExists('0x1234567890abcdef', 'delivery');
       expect(exists).toBe(true);
 
-      const notExists = await EventLog.eventExists(
-        '0xabcdef1234567890',
-        'delivery'
-      );
+      const notExists = await EventLog.eventExists('0xabcdef1234567890', 'delivery');
       expect(notExists).toBe(false);
     });
   });

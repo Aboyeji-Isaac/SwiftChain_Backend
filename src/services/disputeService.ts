@@ -63,7 +63,8 @@ export const createDispute = async (input: CreateDisputeInput): Promise<IDispute
 
   let raisedAtLedger: number | undefined;
   try {
-    raisedAtLedger = await sorobanService.getLatestLedger();
+    const latest = await sorobanService.getLatestLedger();
+    raisedAtLedger = typeof latest === 'number' ? latest : undefined;
   } catch (err) {
     const message = err instanceof Error ? err.message : 'Unknown error';
     logger.warn(`[Dispute] Failed to fetch latest Soroban ledger for audit stamp: ${message}`);
@@ -241,4 +242,141 @@ export const updateDispute = async (id: string, input: UpdateDisputeInput): Prom
   logger.info(`[Dispute] Dispute ${id} updated`);
 
   return dispute;
+};
+
+// ─── Indexer event handlers ─────────────────────────────────────────────────
+//
+// The Soroban dispute events arrive through the indexer with on-chain
+// identifiers rather than Mongo ids, so these helpers intentionally use
+// `disputeId` as the lookup key and never throw for unknown entities:
+// the indexer may observe events out of strict ledger order.
+
+export interface DisputeOpenedEventInput {
+  disputeId: string;
+  deliveryId: string;
+  openedBy?: string;
+  reason?: string;
+  ledgerSequence: number;
+}
+
+export interface DisputeResolvedEventInput {
+  disputeId: string;
+  resolution?: string;
+  ledgerSequence: number;
+}
+
+/** List disputes with optional status filter (used by tests and admin views). */
+export const listDisputes = async (
+  page = 1,
+  limit = 20,
+  status?: DisputeStatus,
+): Promise<{
+  data: IDispute[];
+  pagination: { page: number; limit: number; total: number; totalPages: number };
+}> => {
+  const query: Record<string, unknown> = status ? { status } : {};
+  const [data, total] = await Promise.all([
+    Dispute.find(query)
+      .sort({ createdAt: -1 })
+      .skip((page - 1) * limit)
+      .limit(limit)
+      .exec(),
+    Dispute.countDocuments(query).exec(),
+  ]);
+
+  return {
+    data,
+    pagination: { page, limit, total, totalPages: Math.ceil(total / limit) },
+  };
+};
+
+/** Fetch a dispute by its on-chain identifier. */
+export const getDisputeByDisputeId = async (disputeId: string): Promise<IDispute> => {
+  const dispute = await Dispute.findOne({ disputeId });
+  if (!dispute) {
+    throw new AppError(`Dispute '${disputeId}' not found.`, StatusCodes.NOT_FOUND);
+  }
+  return dispute;
+};
+
+/**
+ * Handle a `dispute_opened` indexer event: persist the dispute locally.
+ * Idempotent — repeated events for the same on-chain disputeId are no-ops.
+ */
+export const openDisputeFromEvent = async (input: DisputeOpenedEventInput): Promise<IDispute> => {
+  const { disputeId, deliveryId, openedBy, reason, ledgerSequence } = input;
+
+  if (!disputeId || !deliveryId) {
+    throw new AppError('disputeId and deliveryId are required.', StatusCodes.BAD_REQUEST);
+  }
+
+  const existing = await Dispute.findOne({ disputeId });
+  if (existing) {
+    return existing;
+  }
+
+  const dispute = await Dispute.create({
+    disputeId,
+    deliveryId,
+    openedBy,
+    raisedBy: openedBy ?? 'on-chain',
+    reason: DisputeReason.OTHER,
+    description: reason ?? 'Dispute opened on-chain.',
+    status: DisputeStatus.OPEN,
+    openedLedger: ledgerSequence,
+  });
+
+  logger.info(
+    `[Dispute] On-chain dispute ${disputeId} recorded for delivery ${deliveryId} ` +
+      `(ledger ${ledgerSequence})`,
+  );
+
+  return dispute;
+};
+
+/**
+ * Handle a `dispute_resolved` indexer event. Unknown disputes are logged and
+ * ignored rather than thrown — the indexer can observe events out of order.
+ */
+export const resolveDisputeFromEvent = async (
+  input: DisputeResolvedEventInput,
+): Promise<IDispute | null> => {
+  const { disputeId, resolution, ledgerSequence } = input;
+
+  const dispute = await Dispute.findOne({ disputeId });
+  if (!dispute) {
+    logger.warn(`[Dispute] dispute_resolved for unknown disputeId=${disputeId} — ignoring`);
+    return null;
+  }
+
+  dispute.status = DisputeStatus.RESOLVED;
+  dispute.resolution = resolution;
+  dispute.resolvedLedger = ledgerSequence;
+  dispute.resolvedAt = new Date();
+
+  await dispute.save();
+
+  logger.info(`[Dispute] On-chain dispute ${disputeId} resolved at ledger ${ledgerSequence}`);
+
+  return dispute;
+};
+
+/**
+ * Event-facing facade consumed by src/indexer/disputeHandlers.ts.
+ * Registered on the module namespace so `import { disputeService }` works
+ * exactly like the other function-module services in this codebase.
+ */
+export const disputeService = {
+  openDispute: (input: DisputeOpenedEventInput): Promise<IDispute> => openDisputeFromEvent(input),
+  resolveDispute: (input: DisputeResolvedEventInput): Promise<IDispute | null> =>
+    resolveDisputeFromEvent(input),
+  listDisputes,
+  getDisputeByDisputeId,
+  getDisputeById: async (disputeId: string): Promise<IDispute> => {
+    const dispute = await Dispute.findOne({ disputeId });
+    if (!dispute) {
+      throw new AppError(`Dispute '${disputeId}' not found.`, StatusCodes.NOT_FOUND);
+    }
+    return dispute;
+  },
 };

@@ -163,11 +163,7 @@ export class ProfilePictureService {
 
     let uploadResult;
     try {
-      uploadResult = await storageDriver.upload(
-        processedBuffer,
-        storageKey,
-        processedMimeType,
-      );
+      uploadResult = await storageDriver.upload(processedBuffer, storageKey, processedMimeType);
 
       logger.debug(
         `[ProfilePicture] Uploaded to storage — userId=${userId} key=${uploadResult.key}`,
@@ -187,9 +183,7 @@ export class ProfilePictureService {
 
     await user.save();
 
-    logger.info(
-      `[ProfilePicture] Profile updated — userId=${userId} url=${uploadResult.url}`,
-    );
+    logger.info(`[ProfilePicture] Profile updated — userId=${userId} url=${uploadResult.url}`);
 
     // ── 8. TODO: Cleanup old profile picture ─────────────────────────────────
     // In a production system, you'd want to delete the old profile picture

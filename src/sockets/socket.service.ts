@@ -61,7 +61,11 @@ export class SocketService {
 
     if (userId) {
       const flushed = messageQueueService.flush(userId, (event, payload, ackCallback) => {
-        socket.emit(event, payload, ackCallback);
+        (socket.emit as (event: string, payload: unknown, ack?: unknown) => void)(
+          event,
+          payload,
+          ackCallback,
+        );
       });
 
       if (flushed > 0) {
@@ -232,21 +236,21 @@ export class SocketService {
         staleConnectionsEvicted += 1;
       } else {
         // Send ping and wait for pong response
-      // Send ping and wait for pong response
-      const pingPayload: PingPayload = { timestamp: Date.now() };
-      const socket = io.sockets.sockets.get(socketId);
-      if (socket) {
-        // Check JWT expiration before sending ping
-        const exp = (socket.data as any).tokenExp as number | undefined;
-        if (exp && exp < Date.now()) {
-          // Token has expired – notify client and disconnect
-          logger.warn(`[Socket] JWT expired for socket id=${socketId}`);
-          socket.emit('auth_expired');
-          socket.disconnect(true);
-        } else {
-          socket.emit('ping', pingPayload);
+        // Send ping and wait for pong response
+        const pingPayload: PingPayload = { timestamp: Date.now() };
+        const socket = io.sockets.sockets.get(socketId);
+        if (socket) {
+          // Check JWT expiration before sending ping
+          const exp = (socket.data as any).tokenExp as number | undefined;
+          if (exp && exp < Date.now()) {
+            // Token has expired – notify client and disconnect
+            logger.warn(`[Socket] JWT expired for socket id=${socketId}`);
+            socket.emit('auth_expired');
+            socket.disconnect(true);
+          } else {
+            socket.emit('ping', pingPayload);
+          }
         }
-      }
       }
     }
 
@@ -286,6 +290,23 @@ export class SocketService {
    */
   public getConnections(): ReadonlyMap<string, SocketConnectionMeta> {
     return this.connections;
+  }
+
+  /**
+   * Update the stored JWT expiration for an active connection after the
+   * client refreshed its token.
+   *
+   * @param socketId - Target socket id.
+   * @param tokenExp - New expiration timestamp (ms since epoch).
+   * @returns         True when the connection is still tracked and updated.
+   */
+  public updateTokenExpiration(socketId: string, tokenExp: number): boolean {
+    const meta = this.connections.get(socketId);
+    if (!meta) {
+      return false;
+    }
+    meta.tokenExp = tokenExp;
+    return true;
   }
 
   /**

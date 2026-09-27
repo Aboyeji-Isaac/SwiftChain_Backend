@@ -1,27 +1,57 @@
 import { z } from 'zod';
 
-const contactSchema = z.object({
-  name: z.string().min(1, 'name is required').trim(),
-  contact: z.string().min(1, 'contact is required').trim(),
-  address: z.string().min(1, 'address is required').trim(),
-});
+// Location payloads consumed by DeliveryService.create (see
+// src/services/delivery.service.ts CreateDeliveryInput).
+const locationSchema = z
+  .object({
+    address: z.string().min(1).trim(),
+    city: z.string().optional(),
+    state: z.string().optional(),
+    zipCode: z.string().optional(),
+    instructions: z.string().optional(),
+  })
+  .passthrough();
 
+const customerSchema = z
+  .object({
+    name: z.string().min(1).trim(),
+    phone: z.string().min(1).trim(),
+    email: z.string().email().optional(),
+  })
+  .passthrough();
+
+const packageSchema = z
+  .object({
+    description: z.string().min(1).trim(),
+    weight: z.number().positive().optional(),
+    size: z.string().optional(),
+    isFragile: z.boolean().optional(),
+    requiresSignature: z.boolean().optional(),
+  })
+  .passthrough();
+
+// Mirrors the fields DeliveryController.create actually passes to
+// deliveryService.create — customer/pickup/dropoff/package + fees.
 export const createDeliverySchema = z.object({
-  sender: contactSchema,
-  recipient: contactSchema,
-  packageDescription: z.string().min(1, 'packageDescription is required').trim(),
-  weight: z.number().positive().optional(),
-  estimatedValue: z.number().nonnegative().optional(),
+  trackingNumber: z.string().min(1).trim().optional(),
+  customer: customerSchema,
+  pickup: locationSchema,
+  dropoff: locationSchema,
+  package: packageSchema,
+  deliveryFee: z.number().nonnegative().optional(),
+  escrowAmount: z.number().nonnegative().optional(),
   notes: z.string().optional(),
 });
 
 export const updateDeliverySchema = z
   .object({
-    sender: contactSchema.partial().optional(),
-    recipient: contactSchema.partial().optional(),
-    packageDescription: z.string().min(1).trim().optional(),
-    weight: z.number().positive().optional(),
-    estimatedValue: z.number().nonnegative().optional(),
+    trackingNumber: z.string().min(1).trim().optional(),
+    customer: customerSchema.partial().optional(),
+    pickup: locationSchema.partial().optional(),
+    dropoff: locationSchema.partial().optional(),
+    package: packageSchema.partial().optional(),
+    deliveryFee: z.number().nonnegative().optional(),
+    escrowAmount: z.number().nonnegative().optional(),
     notes: z.string().optional(),
     status: z.enum(['pending', 'assigned', 'in_transit', 'delivered', 'cancelled']).optional(),
   })

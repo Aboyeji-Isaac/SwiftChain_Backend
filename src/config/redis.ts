@@ -122,10 +122,7 @@ export interface LockOptions {
  *   await lock.release();
  * }
  */
-export const acquireLock = async (
-  resource: string,
-  options: LockOptions = {},
-): Promise<Lock> => {
+export const acquireLock = async (resource: string, options: LockOptions = {}): Promise<Lock> => {
   const ttl = options.ttl ?? env.REDIS_LOCK_TTL_MS;
   const retryCount = options.retryCount ?? env.REDIS_LOCK_RETRY_COUNT;
   const retryDelay = options.retryDelay ?? env.REDIS_LOCK_RETRY_DELAY_MS;

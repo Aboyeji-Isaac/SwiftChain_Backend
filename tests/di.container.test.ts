@@ -9,6 +9,7 @@
 
 import { createDIContainer, resetContainer } from '../src/di/container';
 import { TOKENS } from '../src/di/tokens';
+import { asValue } from 'awilix';
 import type { AwilixContainer } from 'awilix';
 
 describe('DI Container', () => {
@@ -106,7 +107,7 @@ describe('DI Container', () => {
       expect(deliveryService).toBeDefined();
     });
 
-    it('should resolve escrowService', () => {
+    it('resolves the escrowService singleton', () => {
       const escrowService = container.resolve(TOKENS.escrowService);
       expect(escrowService).toBeDefined();
     });
@@ -116,10 +117,25 @@ describe('DI Container', () => {
       expect(sorobanService).toBeDefined();
     });
 
-    it('should support alternate service names', () => {
-      const deliveryService1 = container.resolve(TOKENS.deliveryService);
-      const deliveryService2 = container.resolve(TOKENS.delivery_service);
-      expect(deliveryService1).toBe(deliveryService2);
+    it('registers exactly one canonical token per dependency', () => {
+      // Regression guard for the duplicate-token bug: the legacy snake_case
+      // aliases must never come back as container registrations.
+      const legacyAliases = [
+        'delivery_service',
+        'escrow_service',
+        'delivery_controller',
+        'escrow_controller',
+        'indexer_controller',
+        'stellar_controller',
+      ];
+
+      const registrations = Object.keys(
+        (container as unknown as { registrations: Record<string, unknown> }).registrations,
+      );
+
+      legacyAliases.forEach((alias) => {
+        expect(registrations).not.toContain(alias);
+      });
     });
 
     it('should resolve all services', () => {
@@ -170,10 +186,9 @@ describe('DI Container', () => {
       expect(fleetController).toBeDefined();
     });
 
-    it('should support alternate controller names', () => {
-      const deliveryController1 = container.resolve(TOKENS.deliveryController);
-      const deliveryController2 = container.resolve(TOKENS.delivery_controller);
-      expect(deliveryController1).toBe(deliveryController2);
+    it('resolves the canonical deliveryController token', () => {
+      const deliveryController = container.resolve(TOKENS.deliveryController);
+      expect(deliveryController).toBeDefined();
     });
   });
 
@@ -226,7 +241,7 @@ describe('DI Container', () => {
       };
 
       testContainer.register({
-        [TOKENS.logger]: { useValue: mockLogger },
+        [TOKENS.logger]: asValue(mockLogger),
       });
 
       // Resolve the mocked logger
@@ -254,7 +269,7 @@ describe('DI Container', () => {
 
       // Register the mock
       testContainer.register({
-        [TOKENS.authService]: { useValue: mockAuthService },
+        [TOKENS.authService]: asValue(mockAuthService),
       });
 
       // Verify the mock is used

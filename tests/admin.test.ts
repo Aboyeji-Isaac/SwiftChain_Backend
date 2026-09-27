@@ -44,11 +44,10 @@ afterAll(async () => {
 
 // ─── Helpers ───────────────────────────────────────────────────────────────────
 
-const JWT_SECRET = 'test-secret-key';
+const JWT_SECRET = 'test-secret-key-16chars';
 
 /** Mint a signed JWT for the given user id. */
-const signToken = (userId: string): string =>
-  jwt.sign({ id: userId }, JWT_SECRET, { expiresIn: '1h' });
+const signToken = (userId: string): string => jwt.sign({ userId }, JWT_SECRET, { expiresIn: '1h' });
 
 /** Create a User document directly — bypasses HTTP so passwords are hashed by the pre-save hook. */
 const createUser = async (

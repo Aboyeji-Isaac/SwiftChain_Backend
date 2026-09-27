@@ -249,9 +249,9 @@ describe('DriverLocation', () => {
     });
 
     it('rejects a non-positive radius', async () => {
-      await expect(
-        service.findNearbyDrivers({ ...LAGOS, radiusMeters: 0 }),
-      ).rejects.toBeInstanceOf(AppError);
+      await expect(service.findNearbyDrivers({ ...LAGOS, radiusMeters: 0 })).rejects.toBeInstanceOf(
+        AppError,
+      );
     });
 
     it('rejects a radius beyond the configured maximum', async () => {

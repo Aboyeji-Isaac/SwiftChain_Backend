@@ -35,17 +35,13 @@ describe('Admin Dashboard Endpoint GET /api/v1/admin/dashboard', () => {
   let userToken: string;
 
   beforeAll(() => {
-    adminToken = jwt.sign(
-      { userId: adminId, role: UserRole.ADMIN },
-      env.JWT_SECRET,
-      { expiresIn: '1h' },
-    );
+    adminToken = jwt.sign({ userId: adminId, role: UserRole.ADMIN }, env.JWT_SECRET, {
+      expiresIn: '1h',
+    });
 
-    userToken = jwt.sign(
-      { userId: userId, role: UserRole.USER },
-      env.JWT_SECRET,
-      { expiresIn: '1h' },
-    );
+    userToken = jwt.sign({ userId: userId, role: UserRole.USER }, env.JWT_SECRET, {
+      expiresIn: '1h',
+    });
   });
 
   beforeEach(() => {

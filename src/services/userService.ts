@@ -73,14 +73,7 @@ export class UserService {
    * List users with optional filtering and pagination.
    */
   async getUsers(filters: UserFilter): Promise<PaginatedUserResult> {
-    const {
-      role,
-      status,
-      search,
-      page = 1,
-      limit = 10,
-      includeDeleted = false,
-    } = filters;
+    const { role, status, search, page = 1, limit = 10, includeDeleted = false } = filters;
 
     const query: Record<string, unknown> = {};
 
@@ -193,7 +186,9 @@ export class UserService {
     // Cascade: soft-delete driver profile
     const driverProfile = await DriverProfile.findOne({ userId: id });
     if (driverProfile) {
-      await (driverProfile as unknown as { softDelete(userId?: string): Promise<unknown> }).softDelete(userId);
+      await (
+        driverProfile as unknown as { softDelete(userId?: string): Promise<unknown> }
+      ).softDelete(userId);
       driverProfileDeleted = true;
     }
 
@@ -208,7 +203,9 @@ export class UserService {
       ],
     };
 
-    const deliveries = await Delivery.find(deliveryQuery).setOptions({ includeDeleted: true }).exec();
+    const deliveries = await Delivery.find(deliveryQuery)
+      .setOptions({ includeDeleted: true })
+      .exec();
     for (const delivery of deliveries) {
       await (delivery as unknown as IDelivery).softDelete(userId);
       deliveriesDeleted++;
@@ -217,7 +214,11 @@ export class UserService {
     // Soft-delete the user
     await user.softDelete(userId);
 
-    logger.info(`User soft-deleted: ${user.email}. Cascaded to ${driverProfileDeleted ? 'driver profile, ' : ''}${deliveriesDeleted} deliveries.`);
+    logger.info(
+      `User soft-deleted: ${user.email}. Cascaded to ${
+        driverProfileDeleted ? 'driver profile, ' : ''
+      }${deliveriesDeleted} deliveries.`,
+    );
 
     return {
       user,

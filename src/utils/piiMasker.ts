@@ -172,8 +172,9 @@ export function maskString(value: string): string {
     .replace(JWT_PATTERN, REDACTED)
     .replace(BEARER_PATTERN, (m) => `${m.split(/\s+/)[0]} ${REDACTED}`)
     .replace(STELLAR_SECRET_PATTERN, REDACTED)
-    .replace(CONNECTION_STRING_PATTERN, (_m, scheme: string, user: string) =>
-      `${scheme}${user}:${REDACTED}@`,
+    .replace(
+      CONNECTION_STRING_PATTERN,
+      (_m, scheme: string, user: string) => `${scheme}${user}:${REDACTED}@`,
     )
     .replace(EMAIL_PATTERN, maskEmail)
     .replace(CARD_PATTERN, maskCard)
@@ -208,7 +209,11 @@ export function isSensitiveKey(key: string): boolean {
  * @param seen  - Objects already visited on this path (internal).
  * @returns A masked deep copy. The input is never mutated.
  */
-export function maskValue(value: unknown, depth = 0, seen: WeakSet<object> = new WeakSet()): unknown {
+export function maskValue(
+  value: unknown,
+  depth = 0,
+  seen: WeakSet<object> = new WeakSet(),
+): unknown {
   if (value === null || value === undefined) return value;
 
   if (typeof value === 'string') return maskString(value);

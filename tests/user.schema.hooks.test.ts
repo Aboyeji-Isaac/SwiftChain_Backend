@@ -5,7 +5,7 @@ import type { Express } from 'express';
 
 import User from '../src/models/User';
 import DriverProfile from '../src/models/DriverProfile';
-import Delivery, { IDelivery } from '../src/models/Delivery';
+import Delivery from '../src/models/Delivery';
 import { IUser } from '../src/interfaces/IUser';
 
 jest.mock('../src/config/database', () => ({
@@ -75,7 +75,9 @@ describe('POST /api/v1/auth/register - Password Hashing', () => {
       password,
     });
 
-    const stored = await mongoose.connection.collection('users').findOne({ email: 'hash.test@swiftchain.com' });
+    const stored = await mongoose.connection
+      .collection('users')
+      .findOne({ email: 'hash.test@swiftchain.com' });
 
     expect(stored).not.toBeNull();
     expect(stored?.password).toBeDefined();
@@ -136,7 +138,9 @@ describe('PUT /api/v1/users/:id/password - Password Hashing on Update', () => {
 
     expect(updateRes.status).toBe(200);
 
-    const stored = await mongoose.connection.collection('users').findOne({ email: 'updatepass@swiftchain.com' });
+    const stored = await mongoose.connection
+      .collection('users')
+      .findOne({ email: 'updatepass@swiftchain.com' });
     expect(stored?.password).toBeDefined();
     expect(stored?.password).not.toBe(newPassword);
     expect(stored?.password).toMatch(/^\$2[aby]\$/);
@@ -172,7 +176,7 @@ describe('PUT /api/v1/users/:id/password - Password Hashing on Update', () => {
 
   it('prevents users from updating other users passwords', async () => {
     const token1 = await registerAndLogin('user1@swiftchain.com', 'Pass12345!', 'user');
-    const token2 = await registerAndLogin('user2@swiftchain.com', 'Pass12345!', 'user');
+    const _token2 = await registerAndLogin('user2@swiftchain.com', 'Pass12345!', 'user');
 
     const loginRes2 = await request(app).post('/api/v1/auth/login').send({
       email: 'user2@swiftchain.com',
@@ -195,7 +199,11 @@ describe('PUT /api/v1/users/:id/password - Password Hashing on Update', () => {
 
 describe('DELETE /api/v1/users/:id - Soft Delete Cascading', () => {
   it('soft-deletes the user and cascades to related DriverProfile and Deliveries', async () => {
-    const adminToken = await registerAndLogin('cascade.admin@swiftchain.com', 'AdminPass123!', 'admin');
+    const adminToken = await registerAndLogin(
+      'cascade.admin@swiftchain.com',
+      'AdminPass123!',
+      'admin',
+    );
 
     // Register a driver user
     const driverRes = await request(app).post('/api/v1/auth/register').send({
@@ -263,14 +271,20 @@ describe('DELETE /api/v1/users/:id - Soft Delete Cascading', () => {
     expect(deletedUser?.deletedAt).toBeDefined();
 
     // Verify driver profile is soft-deleted
-    const deletedProfile = await DriverProfile.findOne({ userId: driverId }).setOptions({ includeDeleted: true });
+    const deletedProfile = await DriverProfile.findOne({ userId: driverId }).setOptions({
+      includeDeleted: true,
+    });
     expect(deletedProfile?.isDeleted).toBe(true);
 
     // Verify deliveries are soft-deleted
-    const deletedDelivery1 = await Delivery.findById(delivery1._id).setOptions({ includeDeleted: true });
+    const deletedDelivery1 = await Delivery.findById(delivery1._id).setOptions({
+      includeDeleted: true,
+    });
     expect(deletedDelivery1?.isDeleted).toBe(true);
 
-    const deletedDelivery2 = await Delivery.findById(delivery2._id).setOptions({ includeDeleted: true });
+    const deletedDelivery2 = await Delivery.findById(delivery2._id).setOptions({
+      includeDeleted: true,
+    });
     expect(deletedDelivery2?.isDeleted).toBe(true);
 
     // Verify user is excluded from normal queries
@@ -279,7 +293,11 @@ describe('DELETE /api/v1/users/:id - Soft Delete Cascading', () => {
   });
 
   it('soft-deletes only the user when no related records exist', async () => {
-    const adminToken = await registerAndLogin('cascade.admin2@swiftchain.com', 'AdminPass123!', 'admin');
+    const adminToken = await registerAndLogin(
+      'cascade.admin2@swiftchain.com',
+      'AdminPass123!',
+      'admin',
+    );
 
     const driverRes = await request(app).post('/api/v1/auth/register').send({
       firstName: 'Solo',
@@ -300,7 +318,11 @@ describe('DELETE /api/v1/users/:id - Soft Delete Cascading', () => {
   });
 
   it('returns 409 when deleting an already deleted user', async () => {
-    const adminToken = await registerAndLogin('cascade.admin3@swiftchain.com', 'AdminPass123!', 'admin');
+    const adminToken = await registerAndLogin(
+      'cascade.admin3@swiftchain.com',
+      'AdminPass123!',
+      'admin',
+    );
 
     const driverRes = await request(app).post('/api/v1/auth/register').send({
       firstName: 'Twice',
@@ -327,7 +349,11 @@ describe('DELETE /api/v1/users/:id - Soft Delete Cascading', () => {
 
 describe('POST /api/v1/users/:id/restore - Restore Soft Deleted User', () => {
   it('restores a soft-deleted user', async () => {
-    const adminToken = await registerAndLogin('restore.admin@swiftchain.com', 'AdminPass123!', 'admin');
+    const adminToken = await registerAndLogin(
+      'restore.admin@swiftchain.com',
+      'AdminPass123!',
+      'admin',
+    );
 
     const driverRes = await request(app).post('/api/v1/auth/register').send({
       firstName: 'Restore',
@@ -359,7 +385,11 @@ describe('POST /api/v1/users/:id/restore - Restore Soft Deleted User', () => {
   });
 
   it('returns 409 when restoring a non-deleted user', async () => {
-    const adminToken = await registerAndLogin('restore.admin2@swiftchain.com', 'AdminPass123!', 'admin');
+    const adminToken = await registerAndLogin(
+      'restore.admin2@swiftchain.com',
+      'AdminPass123!',
+      'admin',
+    );
 
     const driverRes = await request(app).post('/api/v1/auth/register').send({
       firstName: 'Active',
@@ -390,7 +420,9 @@ describe('GET /api/v1/users/:id - Timestamps and Indexing', () => {
 
     expect(res.status).toBe(201);
 
-    const stored = await mongoose.connection.collection('users').findOne({ email: 'timestamp.user@swiftchain.com' });
+    const stored = await mongoose.connection
+      .collection('users')
+      .findOne({ email: 'timestamp.user@swiftchain.com' });
     expect(stored?.createdAt).toBeDefined();
     expect(stored?.updatedAt).toBeDefined();
 
@@ -478,7 +510,11 @@ describe('GET /api/v1/users/:id - Timestamps and Indexing', () => {
   });
 
   it('excludes soft-deleted users from normal queries', async () => {
-    const adminToken = await registerAndLogin('idx.admin2@swiftchain.com', 'AdminPass123!', 'admin');
+    const adminToken = await registerAndLogin(
+      'idx.admin2@swiftchain.com',
+      'AdminPass123!',
+      'admin',
+    );
 
     const driverRes = await request(app).post('/api/v1/auth/register').send({
       firstName: 'Filter',
@@ -510,7 +546,11 @@ describe('GET /api/v1/users/:id - Timestamps and Indexing', () => {
   });
 
   it('returns soft-deleted users via the deleted endpoint', async () => {
-    const adminToken = await registerAndLogin('idx.admin3@swiftchain.com', 'AdminPass123!', 'admin');
+    const adminToken = await registerAndLogin(
+      'idx.admin3@swiftchain.com',
+      'AdminPass123!',
+      'admin',
+    );
 
     const driverRes = await request(app).post('/api/v1/auth/register').send({
       firstName: 'Deleted',

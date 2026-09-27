@@ -20,7 +20,7 @@
 
 import request from 'supertest';
 import mongoose from 'mongoose';
-import jwt from 'jsonwebtoken';
+
 import axios from 'axios';
 import { MongoMemoryServer } from 'mongodb-memory-server';
 import type { Express } from 'express';
@@ -29,7 +29,7 @@ import { Delivery } from '../../src/models/Delivery';
 import User from '../../src/models/User';
 import { deliveryService } from '../../src/services/deliveryService';
 import { routingService } from '../../src/services/routingService';
-import type { ETARequest, ETAResponse } from '../../src/services/routingService';
+import type { ETARequest } from '../../src/services/routingService';
 
 /**
  * Mock axios to control Google Maps API responses.
@@ -336,9 +336,7 @@ describe('Delivery ETA Integration Tests — Google Maps API', () => {
         };
 
         // Should throw error and trigger fallback in calling code
-        await expect(routingService.calculateETA(request)).rejects.toThrow(
-          'Google Maps API error',
-        );
+        await expect(routingService.calculateETA(request)).rejects.toThrow('Google Maps API error');
       } finally {
         if (originalKey) {
           process.env.GOOGLE_MAPS_API_KEY = originalKey;

@@ -9,7 +9,7 @@ import env from '../config/env';
 // ─── JWT payload shape ────────────────────────────────────────────────────────
 
 interface JwtPayload {
-  userId: string;  // Changed from 'id' to 'userId' to match login route
+  userId: string; // Changed from 'id' to 'userId' to match login route
   iat?: number;
   exp?: number;
 }

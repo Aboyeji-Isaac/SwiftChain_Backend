@@ -79,7 +79,15 @@ class UserController {
   public updateUser = asyncHandler(
     async (req: Request, res: Response, _next: NextFunction): Promise<void> => {
       const { id } = req.params;
-      const allowedFields = ['firstName', 'lastName', 'role', 'status', 'walletAddress', 'profilePicture', 'profilePictureKey'];
+      const allowedFields = [
+        'firstName',
+        'lastName',
+        'role',
+        'status',
+        'walletAddress',
+        'profilePicture',
+        'profilePictureKey',
+      ];
       const updateInput: Record<string, unknown> = {};
 
       for (const key of allowedFields) {
@@ -159,10 +167,7 @@ class UserController {
       const { id } = req.params;
 
       if (currentUserId !== id) {
-        throw new AppError(
-          'You can only update your own password.',
-          StatusCodes.FORBIDDEN,
-        );
+        throw new AppError('You can only update your own password.', StatusCodes.FORBIDDEN);
       }
 
       const { currentPassword, newPassword } = req.body as {
@@ -178,10 +183,7 @@ class UserController {
       }
 
       if (newPassword.length < 8) {
-        throw new AppError(
-          'New password must be at least 8 characters.',
-          StatusCodes.BAD_REQUEST,
-        );
+        throw new AppError('New password must be at least 8 characters.', StatusCodes.BAD_REQUEST);
       }
 
       const user = await userService.updatePassword(id, { currentPassword, newPassword });
