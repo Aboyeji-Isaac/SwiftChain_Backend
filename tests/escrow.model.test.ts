@@ -16,6 +16,8 @@ describe('Escrow model', () => {
   beforeAll(async () => {
     mongod = await MongoMemoryServer.create();
     await mongoose.connect(mongod.getUri());
+    // Wait for the unique indexes before asserting duplicate writes.
+    await Escrow.init();
   }, 60_000);
 
   afterAll(async () => {
