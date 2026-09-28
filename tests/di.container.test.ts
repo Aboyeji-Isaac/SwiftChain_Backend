@@ -143,6 +143,7 @@ describe('DI Container', () => {
         TOKENS.authService,
         TOKENS.deliveryService,
         TOKENS.driverService,
+        TOKENS.driverRatingService,
         TOKENS.fleetService,
         TOKENS.escrowService,
         TOKENS.disputeService,
@@ -184,6 +185,12 @@ describe('DI Container', () => {
     it('should resolve fleetController', () => {
       const fleetController = container.resolve(TOKENS.fleetController);
       expect(fleetController).toBeDefined();
+    });
+
+    it('should resolve driverRatingController', () => {
+      const driverRatingController = container.resolve(TOKENS.driverRatingController);
+      expect(driverRatingController).toBeDefined();
+      expect(typeof driverRatingController.getDriverRating).toBe('function');
     });
 
     it('resolves the canonical deliveryController token', () => {

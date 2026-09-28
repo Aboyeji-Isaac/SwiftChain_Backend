@@ -1,5 +1,5 @@
 import mongoose, { Schema } from 'mongoose';
-import { IDriverProfile, ReputationTier } from '../interfaces/IDriverProfile';
+import { DRIVER_RATING_RULES, IDriverProfile, ReputationTier } from '../interfaces/IDriverProfile';
 import { nowUTC } from '../utils/dateUtils';
 
 const vehicleDetailsSchema = new Schema(
@@ -61,6 +61,38 @@ const driverProfileSchema = new Schema<IDriverProfile>(
       default: 0,
       min: 0,
     },
+    rating: {
+      type: Number,
+      default: DRIVER_RATING_RULES.MAX_RATING,
+      min: [DRIVER_RATING_RULES.MIN_RATING, 'rating cannot be negative'],
+      max: [DRIVER_RATING_RULES.MAX_RATING, 'rating cannot exceed 5'],
+    },
+    delayedDeliveries: {
+      type: Number,
+      default: 0,
+      min: 0,
+    },
+    cancelledDeliveries: {
+      type: Number,
+      default: 0,
+      min: 0,
+    },
+    isSuspended: {
+      type: Boolean,
+      default: false,
+    },
+    suspendedUntil: {
+      type: Date,
+      default: null,
+    },
+    suspensionReason: {
+      type: String,
+      trim: true,
+    },
+    lastRatingUpdate: {
+      type: Date,
+      default: null,
+    },
     vehicleDetails: {
       type: vehicleDetailsSchema,
       required: false,
@@ -96,8 +128,43 @@ driverProfileSchema.methods.restore = async function (): Promise<IDriverProfile>
   return this.save();
 };
 
+/**
+ * Apply a temporary suspension to the profile.
+ *
+ * Kept as a model method (rather than written inline in the service) so the
+ * penalty is always recorded with the same shape: flag, expiry and reason.
+ */
+driverProfileSchema.methods.applySuspension = async function (
+  suspendedUntil: Date,
+  reason: string,
+): Promise<IDriverProfile> {
+  this.isSuspended = true;
+  this.suspendedUntil = suspendedUntil;
+  this.suspensionReason = reason;
+  return this.save();
+};
+
+/**
+ * Lift an active suspension once it has lapsed, clearing the penalty fields.
+ * Returns the profile unchanged when no suspension was active.
+ */
+driverProfileSchema.methods.liftSuspension = async function (): Promise<IDriverProfile> {
+  // `save()` on an unmodified document is a no-op, so the early return keeps
+  // the method cheap without an extra write.
+  if (!this.isSuspended) return this.save();
+
+  this.isSuspended = false;
+  this.suspendedUntil = null;
+  this.suspensionReason = undefined;
+  return this.save();
+};
+
 // Index for leaderboard queries: descending reputation points
 driverProfileSchema.index({ reputationPoints: -1 });
+
+// Index for rating-based lookups and the penalty sweep: suspended drivers
+// whose suspension has lapsed are lifted in one query.
+driverProfileSchema.index({ isSuspended: 1, suspendedUntil: 1 });
 
 // Compound index for filtering by user and deletion status
 driverProfileSchema.index({ userId: 1, isDeleted: 1 });

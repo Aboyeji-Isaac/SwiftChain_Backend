@@ -197,6 +197,10 @@ interface EnvConfig {
   /** Cron expression driving the auto-assignment sweep for unassigned funded deliveries. Default: every minute */
   AUTO_ASSIGNMENT_CRON: string;
 
+  // ── Driver rating & penalties ─────────────────────────────────────
+  /** Cron expression driving the driver-rating sweep. Default: hourly */
+  DRIVER_RATING_CRON: string;
+
   // ── Proof of delivery ────────────────────────────────────────────
   /** Maximum accepted proof-of-delivery image size, in MB. Default: 8 */
   PROOF_OF_DELIVERY_MAX_SIZE_MB: number;
@@ -339,6 +343,9 @@ const envSchema = z.object({
   // ── Driver assignment ────────────────────────────────────────────
   ASSIGNMENT_RADIUS_EXPANSION_STEPS: z.coerce.number().int().min(0).max(10).default(3),
   AUTO_ASSIGNMENT_CRON: z.string().trim().min(1).default('* * * * *'),
+
+  // ── Driver rating & penalties ─────────────────────────────────────
+  DRIVER_RATING_CRON: z.string().trim().min(1).default('0 * * * *'),
 
   // ── Proof of delivery ────────────────────────────────────────────
   PROOF_OF_DELIVERY_MAX_SIZE_MB: z.coerce.number().int().min(1).default(8),
