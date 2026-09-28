@@ -1,3 +1,4 @@
+import { assertLockContractAsset } from './currencyService';
 import {
   Account,
   Address,
@@ -122,6 +123,7 @@ export class TransactionService {
     const delivery = await deliveryService.getById(input.deliveryId);
 
     this.assertLockable(delivery);
+    assertLockContractAsset(delivery.escrowAsset ?? { code: 'XLM' });
     const amount = this.resolveEscrowAmount(delivery);
     const stroops = this.toContractAmount(amount);
 

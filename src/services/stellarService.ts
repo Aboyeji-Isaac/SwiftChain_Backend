@@ -1,3 +1,4 @@
+import { assertLockContractAsset } from './currencyService';
 import {
   Account,
   Address,
@@ -444,6 +445,7 @@ export class StellarService {
 
     // Load delivery from DB — data source per acceptance criteria.
     const delivery = await deliveryService.getById(deliveryId);
+    assertLockContractAsset(delivery.escrowAsset ?? { code: 'XLM' });
     const amount = this.resolveEscrowAmount(delivery);
     const stroops = this.toContractAmount(amount);
 

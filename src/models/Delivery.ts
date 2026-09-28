@@ -1,4 +1,5 @@
 import mongoose, { Schema, Document } from 'mongoose';
+import { Asset } from '../services/currencyService';
 
 export interface IDelivery extends Document {
   deliveryId: string;
@@ -14,7 +15,9 @@ export interface IDelivery extends Document {
   dropoff?: ILocation;
   package?: IPackage;
   deliveryFee?: number;
+  deliveryFeeAsset?: Asset;
   escrowAmount?: number;
+  escrowAsset?: Asset;
   notes?: string;
   pickupCoordinates: {
     lat: number;
@@ -100,7 +103,9 @@ const DeliverySchema = new Schema<IDelivery>(
     dropoff: { type: Schema.Types.Mixed },
     package: { type: Schema.Types.Mixed },
     deliveryFee: { type: Number },
+    deliveryFeeAsset: { type: { code: String, issuer: String }, default: { code: 'XLM' } },
     escrowAmount: { type: Number },
+    escrowAsset: { type: { code: String, issuer: String }, default: { code: 'XLM' } },
     notes: { type: String },
     pickupCoordinates: {
       lat: { type: Number },

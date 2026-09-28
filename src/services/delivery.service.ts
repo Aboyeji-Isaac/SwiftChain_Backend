@@ -1,4 +1,5 @@
 import { Types } from 'mongoose';
+import { Asset, validateAsset } from './currencyService';
 import httpStatus from 'http-status-codes';
 import Delivery, { IDelivery, DeliveryStatus, ILocation, IPackage } from '../models/Delivery';
 import Escrow, { EscrowStatus } from '../models/Escrow';
@@ -20,7 +21,9 @@ export interface CreateDeliveryInput {
   dropoff: ILocation;
   package: IPackage;
   deliveryFee: number;
+  deliveryFeeAsset?: Asset;
   escrowAmount: number;
+  escrowAsset?: Asset;
   notes?: string;
 }
 
@@ -91,7 +94,11 @@ export class DeliveryService {
       throw new AppError('Delivery with this tracking number already exists', httpStatus.CONFLICT);
     }
 
-    const delivery = await Delivery.create(input);
+    const delivery = await Delivery.create({
+      ...input,
+      deliveryFeeAsset: validateAsset(input.deliveryFeeAsset ?? { code: 'XLM' }),
+      escrowAsset: validateAsset(input.escrowAsset ?? { code: 'XLM' }),
+    });
     logger.info(`Delivery created: ${delivery.trackingNumber}`);
     return delivery;
   }

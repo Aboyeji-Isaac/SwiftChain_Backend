@@ -1,4 +1,5 @@
 import { Types } from 'mongoose';
+import { assertSameAsset, validateAsset } from './currencyService';
 import httpStatus from 'http-status-codes';
 import Escrow, { IEscrow, EscrowStatus } from '../models/Escrow';
 import Delivery, { DeliveryStatus } from '../models/Delivery';
@@ -17,6 +18,7 @@ export interface EscrowFundedInput {
   amount: number;
   /** Asset code of the escrowed funds as reported by the contract (e.g. `XLM`). */
   asset: string;
+  assetIssuer?: string;
   /** Stellar account that funded the escrow, when present in the event. */
   fundedBy?: string;
   transactionHash: string;
@@ -86,7 +88,27 @@ export class EscrowService {
       throw new AppError('Delivery not found for escrow_funded event', httpStatus.NOT_FOUND);
     }
 
+    const asset = validateAsset({ code: input.asset, issuer: input.assetIssuer });
+    assertSameAsset(delivery.escrowAsset ?? { code: 'XLM' }, asset);
+    if (!Number.isFinite(input.amount) || input.amount <= 0) {
+      throw new AppError('Escrow amount must be positive and finite', httpStatus.BAD_REQUEST);
+    }
+    if (delivery.escrowAmount !== undefined && delivery.escrowAmount !== input.amount) {
+      throw new AppError('Escrow amount must match the delivery', httpStatus.CONFLICT);
+    }
+
     let escrow = await Escrow.findOne({ contractId: input.contractId });
+
+    if (escrow && String(escrow.delivery) !== String(delivery._id)) {
+      throw new AppError('Contract is already linked to another delivery', httpStatus.CONFLICT);
+    }
+    if (
+      escrow &&
+      escrow.assetCode &&
+      (escrow.assetCode !== asset.code || escrow.assetIssuer !== asset.issuer)
+    ) {
+      throw new AppError('Escrow asset cannot change', httpStatus.CONFLICT);
+    }
 
     if (escrow?.transactions.some((tx) => tx.hash === input.transactionHash)) {
       logger.info(
@@ -104,7 +126,8 @@ export class EscrowService {
 
     if (escrow) {
       escrow.amount = input.amount;
-      escrow.assetCode = input.asset;
+      escrow.assetCode = asset.code;
+      escrow.assetIssuer = asset.issuer;
       escrow.payerAddress = input.fundedBy;
       escrow.status = EscrowStatus.LOCKED;
       escrow.lockedAt = escrow.lockedAt ?? new Date();
@@ -117,7 +140,8 @@ export class EscrowService {
         delivery: delivery._id,
         contractId: input.contractId,
         amount: input.amount,
-        assetCode: input.asset,
+        assetCode: asset.code,
+        assetIssuer: asset.issuer,
         payerAddress: input.fundedBy,
         status: EscrowStatus.LOCKED,
         lockedAt,

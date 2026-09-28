@@ -24,7 +24,9 @@ export class DeliveryController {
         dropoff: req.body.dropoff,
         package: req.body.package,
         deliveryFee: req.body.deliveryFee,
+        deliveryFeeAsset: req.body.deliveryFeeAsset,
         escrowAmount: req.body.escrowAmount,
+        escrowAsset: req.body.escrowAsset,
         notes: req.body.notes,
       };
 
