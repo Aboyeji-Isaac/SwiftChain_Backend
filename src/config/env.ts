@@ -118,6 +118,8 @@ interface EnvConfig {
   ETA_GEOHASH_PRECISION: number;
   /** Google Maps Directions API key. Blank disables live routing. */
   GOOGLE_MAPS_API_KEY: string;
+  /** OpenWeather current-weather API key. Blank prevents live fee estimates. */
+  OPENWEATHER_API_KEY: string;
 
   // ── Lifecycle / jobs ──────────────────────────────────────────
   /** Time (ms) allowed for in-flight work to drain on shutdown. Default: 30000 */
@@ -282,6 +284,7 @@ const envSchema = z.object({
   ETA_CACHE_TTL_SECONDS: z.coerce.number().int().min(1).default(600),
   ETA_GEOHASH_PRECISION: z.coerce.number().int().min(1).max(12).default(7),
   GOOGLE_MAPS_API_KEY: z.string().default(''),
+  OPENWEATHER_API_KEY: z.string().default(''),
 
   // ── Lifecycle / jobs ──────────────────────────────────────────
   SHUTDOWN_TIMEOUT_MS: z.coerce.number().int().min(1000).default(30000),

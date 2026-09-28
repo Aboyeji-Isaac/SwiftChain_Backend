@@ -10,8 +10,18 @@ import {
 import authenticate from '../middleware/authenticate';
 import requireRole from '../middleware/requireRole';
 import { UserRole } from '../interfaces/IUser';
+import { estimateFeeSchema } from '../validators/pricingValidator';
+import { pricingController } from '../controllers/pricingController';
 
 const router = Router();
+
+/** Quote a live delivery fee before creating a delivery. */
+router.post(
+  '/fee-estimate',
+  authenticate,
+  validateRequest({ body: estimateFeeSchema }),
+  pricingController.estimate.bind(pricingController),
+);
 
 /**
  * @openapi
