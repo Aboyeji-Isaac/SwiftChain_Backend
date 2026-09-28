@@ -1,5 +1,5 @@
 import mongoose, { Schema, Document } from 'mongoose';
-import { Asset } from '../services/currencyService';
+import type { Asset } from '../types/asset';
 
 export interface IDelivery extends Document {
   deliveryId: string;

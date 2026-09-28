@@ -94,7 +94,7 @@ export class DeliveryService {
       throw new AppError('Delivery with this tracking number already exists', httpStatus.CONFLICT);
     }
 
-    const delivery = await Delivery.create({
+    const delivery = await deliveryRepository.create({
       ...input,
       deliveryFeeAsset: validateAsset(input.deliveryFeeAsset ?? { code: 'XLM' }),
       escrowAsset: validateAsset(input.escrowAsset ?? { code: 'XLM' }),

@@ -1,5 +1,8 @@
 import { z } from 'zod';
 import { AppError } from '../utils/AppError';
+import type { Asset } from '../types/asset';
+
+export type { Asset } from '../types/asset';
 
 /** Each balance belongs to one asset pool. No implicit exchange rate is applied. */
 export const assetSchema = z.object({
@@ -10,7 +13,6 @@ export const assetSchema = z.object({
     .regex(/^[A-Z0-9]{1,12}$/),
   issuer: z.string().trim().optional(),
 });
-export type Asset = z.infer<typeof assetSchema>;
 
 export function validateAsset(input: Asset): Asset {
   const parsed = assetSchema.safeParse(input);
@@ -38,7 +40,8 @@ export function assertSameAsset(expected: Asset, actual: Asset): void {
   }
 }
 
-/** The deployed lock contract takes no asset argument; fail before building an XDR. */
+/** The configured backend lock ABI takes no asset argument; reject other assets.
+ * Verify this ABI against the deployed contract before using the lock endpoint. */
 export function assertLockContractAsset(asset: Asset): void {
   if (validateAsset(asset).code !== 'XLM') {
     throw new AppError('Soroban escrow lock contract does not support this asset yet', 422);

@@ -44,6 +44,7 @@ export interface EscrowLockXdrResult {
     status: DeliveryStatus;
   };
   amount: {
+    assetCode: string;
     value: number;
     stroops: string;
     formatted: string;
@@ -169,6 +170,7 @@ export class TransactionService {
         status: delivery.status,
       },
       amount: {
+        assetCode: delivery.escrowAsset?.code ?? 'XLM',
         value: amount,
         stroops: stroops.toString(),
         formatted: fromStroops(stroops),

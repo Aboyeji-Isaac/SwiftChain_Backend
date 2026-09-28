@@ -1,5 +1,7 @@
 import { Types } from 'mongoose';
 import { assertSameAsset, validateAsset } from './currencyService';
+import { escrowRepository } from '../repositories/EscrowRepository';
+import { deliveryRepository } from '../repositories/DeliveryRepository';
 import httpStatus from 'http-status-codes';
 import Escrow, { IEscrow, EscrowStatus } from '../models/Escrow';
 import Delivery, { DeliveryStatus } from '../models/Delivery';
@@ -83,7 +85,7 @@ export class EscrowService {
       throw new AppError('Invalid deliveryId', httpStatus.BAD_REQUEST);
     }
 
-    const delivery = await Delivery.findById(input.deliveryId);
+    const delivery = await deliveryRepository.findById(input.deliveryId);
     if (!delivery) {
       throw new AppError('Delivery not found for escrow_funded event', httpStatus.NOT_FOUND);
     }
@@ -97,7 +99,11 @@ export class EscrowService {
       throw new AppError('Escrow amount must match the delivery', httpStatus.CONFLICT);
     }
 
-    let escrow = await Escrow.findOne({ contractId: input.contractId });
+    let escrow = await escrowRepository.findByContractId(input.contractId);
+    const deliveryEscrow = await escrowRepository.findByDeliveryId(delivery._id);
+    if (deliveryEscrow && deliveryEscrow.contractId !== input.contractId) {
+      throw new AppError('Delivery already has a different escrow contract', httpStatus.CONFLICT);
+    }
 
     if (escrow && String(escrow.delivery) !== String(delivery._id)) {
       throw new AppError('Contract is already linked to another delivery', httpStatus.CONFLICT);
@@ -116,6 +122,9 @@ export class EscrowService {
       );
       return escrow;
     }
+    if (escrow && escrow.status !== EscrowStatus.LOCKED && escrow.status !== EscrowStatus.PENDING) {
+      throw new AppError('Settled escrow cannot be funded again', httpStatus.CONFLICT);
+    }
 
     const transaction = {
       hash: input.transactionHash,
@@ -132,11 +141,23 @@ export class EscrowService {
       escrow.status = EscrowStatus.LOCKED;
       escrow.lockedAt = escrow.lockedAt ?? new Date();
       escrow.expiresAt = this.computeExpiresAt(escrow.lockedAt);
-      escrow.transactions.push(transaction);
-      await escrow.save();
+      const updated = await escrowRepository.updateById(String(escrow._id), {
+        $set: {
+          amount: escrow.amount,
+          assetCode: escrow.assetCode,
+          assetIssuer: escrow.assetIssuer,
+          payerAddress: escrow.payerAddress,
+          status: escrow.status,
+          lockedAt: escrow.lockedAt,
+          expiresAt: escrow.expiresAt,
+        },
+        $push: { transactions: transaction },
+      });
+      if (!updated) throw new AppError('Escrow changed while funding', httpStatus.CONFLICT);
+      escrow = updated;
     } else {
       const lockedAt = new Date();
-      escrow = await Escrow.create({
+      escrow = await escrowRepository.create({
         delivery: delivery._id,
         contractId: input.contractId,
         amount: input.amount,
@@ -152,7 +173,9 @@ export class EscrowService {
 
     if (delivery.status !== DeliveryStatus.FUNDED) {
       delivery.status = DeliveryStatus.FUNDED;
-      await delivery.save();
+      await deliveryRepository.updateById(String(delivery._id), {
+        $set: { status: DeliveryStatus.FUNDED },
+      });
     }
 
     logger.info(
