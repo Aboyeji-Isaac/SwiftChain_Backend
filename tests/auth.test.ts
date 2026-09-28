@@ -205,6 +205,8 @@ describe('POST /api/v1/auth/login', () => {
       expect(res.status).toBe(400);
       expect(res.body.success).toBe(false);
       expect(res.body.errors).toBeDefined();
+      // The canonical validator tags every failure with its request location.
+      expect(res.body.errors[0]).toMatchObject({ location: 'body', field: 'email' });
     });
 
     it('should return 400 for missing password', async () => {

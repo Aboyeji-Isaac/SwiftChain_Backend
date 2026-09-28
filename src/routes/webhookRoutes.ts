@@ -25,7 +25,7 @@ router.use(requireRole(UserRole.ENTERPRISE, UserRole.ADMIN));
  * @desc    Register a new endpoint to receive delivery lifecycle callbacks
  * @access  Merchant (enterprise) or admin
  */
-router.post('/', validate(registerWebhookSchema), registerWebhook);
+router.post('/', validate({ body: registerWebhookSchema }), registerWebhook);
 
 /**
  * @route   GET /api/v1/webhooks
@@ -46,7 +46,7 @@ router.get('/:id', getWebhook);
  * @desc    Update a webhook's URL, subscribed events, or active state
  * @access  Merchant (enterprise) or admin
  */
-router.patch('/:id', validate(updateWebhookSchema), updateWebhook);
+router.patch('/:id', validate({ body: updateWebhookSchema }), updateWebhook);
 
 /**
  * @route   DELETE /api/v1/webhooks/:id

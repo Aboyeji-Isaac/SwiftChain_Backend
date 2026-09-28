@@ -1,6 +1,6 @@
 import { Router } from 'express';
 import { deliveryController } from '../controllers/delivery.controller';
-import { validateRequest } from '../middlewares/validateRequest';
+import validate from '../middleware/validate';
 import { requireIdempotencyKey } from '../middlewares/idempotency';
 import {
   createDeliverySchema,
@@ -78,7 +78,7 @@ const router = Router();
 router.post(
   '/',
   requireIdempotencyKey,
-  validateRequest({ body: createDeliverySchema }),
+  validate({ body: createDeliverySchema }),
   deliveryController.create.bind(deliveryController),
 );
 
@@ -173,7 +173,7 @@ router.get('/:id', deliveryController.getById.bind(deliveryController));
 
 router.patch(
   '/:id',
-  validateRequest({ body: updateDeliverySchema }),
+  validate({ body: updateDeliverySchema }),
   deliveryController.update.bind(deliveryController),
 );
 
@@ -253,7 +253,7 @@ router.patch(
   '/:id/assign-driver',
   authenticate,
   requireRole(UserRole.ADMIN),
-  validateRequest({ body: assignDriverSchema }),
+  validate({ body: assignDriverSchema }),
   deliveryController.assignDriver.bind(deliveryController),
 );
 

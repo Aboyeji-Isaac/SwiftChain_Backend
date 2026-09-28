@@ -1,6 +1,6 @@
 import { Router } from 'express';
 import { escrowController } from '../controllers/escrow.controller';
-import { validateRequest } from '../middlewares/validateRequest';
+import validate from '../middleware/validate';
 import { requireIdempotencyKey } from '../middlewares/idempotency';
 import { fundEscrowBodySchema } from '../validators/escrowValidator';
 import authenticate from '../middleware/authenticate';
@@ -84,7 +84,7 @@ const router = Router();
 router.post(
   '/fund',
   requireIdempotencyKey,
-  validateRequest({ body: fundEscrowBodySchema }),
+  validate({ body: fundEscrowBodySchema }),
   escrowController.fund.bind(escrowController),
 );
 

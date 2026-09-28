@@ -2,7 +2,7 @@ import { Router } from 'express';
 import userController from '../controllers/userController';
 import { authMiddleware } from '../middlewares/authMiddleware';
 import requireRole from '../middleware/requireRole';
-import { validateRequest } from '../middlewares/validateRequest';
+import validate from '../middleware/validate';
 import { updateWalletSchema } from '../validators/userValidator';
 import { UserRole } from '../interfaces/IUser';
 
@@ -16,7 +16,7 @@ const router = Router();
 router.put(
   '/wallet',
   authMiddleware,
-  validateRequest({ body: updateWalletSchema }),
+  validate({ body: updateWalletSchema }),
   userController.updateWallet,
 );
 
