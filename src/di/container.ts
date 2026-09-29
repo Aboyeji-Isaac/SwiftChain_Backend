@@ -45,6 +45,7 @@ import IdempotencyRecord from '../models/IdempotencyRecord';
 import authService from '../services/authService';
 import { deliveryService } from '../services/deliveryService';
 import { driverService } from '../services/driverService';
+import { driverRatingService } from '../services/driverRatingService';
 import * as fleetService from '../services/fleetService';
 import { escrowService } from '../services/escrow.service';
 import * as disputeService from '../services/disputeService';
@@ -71,6 +72,7 @@ import { deliveryController } from '../controllers/delivery.controller';
 import * as deliveryCrudController from '../controllers/deliveryCrudController';
 import * as deliveryStatusController from '../controllers/deliveryStatusController';
 import { driverController } from '../controllers/driverController';
+import { driverRatingController } from '../controllers/driverRatingController';
 import * as fleetController from '../controllers/fleetController';
 import { escrowController } from '../controllers/escrow.controller';
 import * as disputeController from '../controllers/disputeController';
@@ -129,6 +131,7 @@ export function createDIContainer(): AwilixContainer {
     [TOKENS.authService]: asValue(authService),
     [TOKENS.deliveryService]: asValue(deliveryService),
     [TOKENS.driverService]: asValue(driverService),
+    [TOKENS.driverRatingService]: asValue(driverRatingService),
     [TOKENS.fleetService]: asValue(fleetService),
     [TOKENS.escrowService]: asValue(escrowService),
     [TOKENS.disputeService]: asValue(disputeService),
@@ -161,6 +164,7 @@ export function createDIContainer(): AwilixContainer {
     [TOKENS.deliveryCrudController]: asValue(deliveryCrudController),
     [TOKENS.deliveryStatusController]: asValue(deliveryStatusController),
     [TOKENS.driverController]: asValue(driverController),
+    [TOKENS.driverRatingController]: asValue(driverRatingController),
     [TOKENS.fleetController]: asValue(fleetController),
     [TOKENS.escrowController]: asValue(escrowController),
     [TOKENS.disputeController]: asValue(disputeController),

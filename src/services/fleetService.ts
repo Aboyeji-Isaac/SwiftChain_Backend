@@ -32,7 +32,9 @@ export interface FleetMetrics {
   driverCount: number;
   totalDeliveries: number;
   completedDeliveries: number;
+  /** XLM only; other asset pools are excluded from this legacy metric. */
   totalEscrowValue: number;
+  totalEscrowValueAsset: 'XLM';
 }
 
 // ─── Service ───────────────────────────────────────────────────────────────────
@@ -212,6 +214,7 @@ export const getFleetMetrics = async (
       totalDeliveries: 0,
       completedDeliveries: 0,
       totalEscrowValue: 0,
+      totalEscrowValueAsset: 'XLM',
     };
   }
 
@@ -228,7 +231,15 @@ export const getFleetMetrics = async (
         completedDeliveries: {
           $sum: { $cond: [{ $eq: ['$status', 'completed'] }, 1, 0] },
         },
-        totalEscrowValue: { $sum: { $ifNull: ['$escrowAmount', 0] } },
+        totalEscrowValue: {
+          $sum: {
+            $cond: [
+              { $eq: [{ $ifNull: ['$escrowAsset.code', 'XLM'] }, 'XLM'] },
+              { $ifNull: ['$escrowAmount', 0] },
+              0,
+            ],
+          },
+        },
       },
     },
   ]);
@@ -239,5 +250,6 @@ export const getFleetMetrics = async (
     totalDeliveries: totals?.totalDeliveries ?? 0,
     completedDeliveries: totals?.completedDeliveries ?? 0,
     totalEscrowValue: totals?.totalEscrowValue ?? 0,
+    totalEscrowValueAsset: 'XLM',
   };
 };

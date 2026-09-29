@@ -1,11 +1,12 @@
 import { rpc as StellarRpc, Networks, StrKey } from '@stellar/stellar-sdk';
+import env, { StellarNetwork } from './env';
 import logger from './logger';
 import env from './env';
 
 /**
  * Supported Stellar network aliases.
  */
-export type StellarNetwork = typeof env.STELLAR_NETWORK;
+export type { StellarNetwork };
 
 /**
  * Resolved Stellar configuration derived from environment variables.
@@ -56,11 +57,23 @@ const DEFAULT_RPC_URLS: Record<StellarNetwork, string> = {
 function resolveStellarConfig(): StellarConfig {
   const network = env.STELLAR_NETWORK;
 
-  // Blank values fall back to the well-known endpoint/passphrase for the
-  // selected network, so only non-default deployments need to set them.
-  const rpcUrl = env.SOROBAN_RPC_URL || DEFAULT_RPC_URLS[network];
-  const networkPassphrase = env.STELLAR_NETWORK_PASSPHRASE || NETWORK_PASSPHRASES[network];
-  const escrowContractId = env.SOROBAN_ESCROW_CONTRACT_ID || undefined;
+  const rpcUrl = env.SOROBAN_RPC_URL?.trim() || DEFAULT_RPC_URLS[network];
+
+  // Prefer explicit passphrase env var; fall back to the well-known value for
+  // the configured network.
+  const networkPassphrase = env.STELLAR_NETWORK_PASSPHRASE?.trim() || NETWORK_PASSPHRASES[network];
+
+  const timeoutMs = env.SOROBAN_RPC_TIMEOUT_MS;
+
+  if (!rpcUrl) {
+    throw new Error('SOROBAN_RPC_URL is required and could not be resolved.');
+  }
+
+  if (!networkPassphrase) {
+    throw new Error('STELLAR_NETWORK_PASSPHRASE is required and could not be resolved.');
+  }
+
+  const escrowContractId = env.SOROBAN_ESCROW_CONTRACT_ID?.trim() || undefined;
 
   if (escrowContractId && !StrKey.isValidContract(escrowContractId)) {
     throw new Error(
@@ -76,7 +89,8 @@ function resolveStellarConfig(): StellarConfig {
     timeoutMs: env.SOROBAN_RPC_TIMEOUT_MS,
     escrowContractId,
     escrowLockFunction: env.SOROBAN_ESCROW_LOCK_FUNCTION,
-    baseFee: env.STELLAR_BASE_FEE,
+    // The SDK's transaction builder expects the fee as a string.
+    baseFee: String(env.STELLAR_BASE_FEE),
     transactionTimeoutSeconds: env.STELLAR_TRANSACTION_TIMEOUT_SECONDS,
   };
 }

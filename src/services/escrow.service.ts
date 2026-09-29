@@ -1,4 +1,7 @@
 import { Types } from 'mongoose';
+import { assertSameAsset, validateAsset } from './currencyService';
+import { escrowRepository } from '../repositories/EscrowRepository';
+import { deliveryRepository } from '../repositories/DeliveryRepository';
 import httpStatus from 'http-status-codes';
 import Escrow, { IEscrow, EscrowStatus } from '../models/Escrow';
 import Delivery, { DeliveryStatus } from '../models/Delivery';
@@ -17,6 +20,7 @@ export interface EscrowFundedInput {
   amount: number;
   /** Asset code of the escrowed funds as reported by the contract (e.g. `XLM`). */
   asset: string;
+  assetIssuer?: string;
   /** Stellar account that funded the escrow, when present in the event. */
   fundedBy?: string;
   transactionHash: string;
@@ -81,18 +85,45 @@ export class EscrowService {
       throw new AppError('Invalid deliveryId', httpStatus.BAD_REQUEST);
     }
 
-    const delivery = await Delivery.findById(input.deliveryId);
+    const delivery = await deliveryRepository.findById(input.deliveryId);
     if (!delivery) {
       throw new AppError('Delivery not found for escrow_funded event', httpStatus.NOT_FOUND);
     }
 
-    let escrow = await Escrow.findOne({ contractId: input.contractId });
+    const asset = validateAsset({ code: input.asset, issuer: input.assetIssuer });
+    assertSameAsset(delivery.escrowAsset ?? { code: 'XLM' }, asset);
+    if (!Number.isFinite(input.amount) || input.amount <= 0) {
+      throw new AppError('Escrow amount must be positive and finite', httpStatus.BAD_REQUEST);
+    }
+    if (delivery.escrowAmount !== undefined && delivery.escrowAmount !== input.amount) {
+      throw new AppError('Escrow amount must match the delivery', httpStatus.CONFLICT);
+    }
+
+    let escrow = await escrowRepository.findByContractId(input.contractId);
+    const deliveryEscrow = await escrowRepository.findByDeliveryId(delivery._id);
+    if (deliveryEscrow && deliveryEscrow.contractId !== input.contractId) {
+      throw new AppError('Delivery already has a different escrow contract', httpStatus.CONFLICT);
+    }
+
+    if (escrow && String(escrow.delivery) !== String(delivery._id)) {
+      throw new AppError('Contract is already linked to another delivery', httpStatus.CONFLICT);
+    }
+    if (
+      escrow &&
+      escrow.assetCode &&
+      (escrow.assetCode !== asset.code || escrow.assetIssuer !== asset.issuer)
+    ) {
+      throw new AppError('Escrow asset cannot change', httpStatus.CONFLICT);
+    }
 
     if (escrow?.transactions.some((tx) => tx.hash === input.transactionHash)) {
       logger.info(
         `[EscrowService] Skipping already-processed escrow_funded tx=${input.transactionHash}`,
       );
       return escrow;
+    }
+    if (escrow && escrow.status !== EscrowStatus.LOCKED && escrow.status !== EscrowStatus.PENDING) {
+      throw new AppError('Settled escrow cannot be funded again', httpStatus.CONFLICT);
     }
 
     const transaction = {
@@ -104,20 +135,34 @@ export class EscrowService {
 
     if (escrow) {
       escrow.amount = input.amount;
-      escrow.assetCode = input.asset;
+      escrow.assetCode = asset.code;
+      escrow.assetIssuer = asset.issuer;
       escrow.payerAddress = input.fundedBy;
       escrow.status = EscrowStatus.LOCKED;
       escrow.lockedAt = escrow.lockedAt ?? new Date();
       escrow.expiresAt = this.computeExpiresAt(escrow.lockedAt);
-      escrow.transactions.push(transaction);
-      await escrow.save();
+      const updated = await escrowRepository.updateById(String(escrow._id), {
+        $set: {
+          amount: escrow.amount,
+          assetCode: escrow.assetCode,
+          assetIssuer: escrow.assetIssuer,
+          payerAddress: escrow.payerAddress,
+          status: escrow.status,
+          lockedAt: escrow.lockedAt,
+          expiresAt: escrow.expiresAt,
+        },
+        $push: { transactions: transaction },
+      });
+      if (!updated) throw new AppError('Escrow changed while funding', httpStatus.CONFLICT);
+      escrow = updated;
     } else {
       const lockedAt = new Date();
-      escrow = await Escrow.create({
+      escrow = await escrowRepository.create({
         delivery: delivery._id,
         contractId: input.contractId,
         amount: input.amount,
-        assetCode: input.asset,
+        assetCode: asset.code,
+        assetIssuer: asset.issuer,
         payerAddress: input.fundedBy,
         status: EscrowStatus.LOCKED,
         lockedAt,
@@ -128,7 +173,9 @@ export class EscrowService {
 
     if (delivery.status !== DeliveryStatus.FUNDED) {
       delivery.status = DeliveryStatus.FUNDED;
-      await delivery.save();
+      await deliveryRepository.updateById(String(delivery._id), {
+        $set: { status: DeliveryStatus.FUNDED },
+      });
     }
 
     logger.info(
