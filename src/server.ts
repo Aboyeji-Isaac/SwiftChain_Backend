@@ -11,6 +11,7 @@ import {
 import { startEscrowMonitorJob, stopEscrowMonitorJob } from './jobs/escrowMonitor';
 import { startWebhookRetryJob, stopWebhookRetryJob } from './jobs/webhookRetryJob';
 import { startAutoAssignmentJob, stopAutoAssignmentJob } from './jobs/autoAssignmentJob';
+import { startDriverRatingJob, stopDriverRatingJob } from './jobs/driverRatingJob';
 import { startEventPoller, stopEventPoller } from './services/eventPoller';
 import { initializeRedis, disconnectRedis } from './config/redis';
 import env from './config/env';
@@ -50,6 +51,7 @@ if (env.NODE_ENV !== 'test') {
   startEscrowMonitorJob();
   startWebhookRetryJob();
   startAutoAssignmentJob();
+  startDriverRatingJob();
   startEventPoller();
 }
 
@@ -59,6 +61,7 @@ const gracefulShutdown = (): void => {
   stopEscrowMonitorJob();
   stopWebhookRetryJob();
   stopAutoAssignmentJob();
+  stopDriverRatingJob();
 
   // Disconnect Redis
   disconnectRedis().catch((error) => logger.error('Error disconnecting Redis:', error));

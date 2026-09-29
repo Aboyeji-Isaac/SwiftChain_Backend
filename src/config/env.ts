@@ -94,33 +94,33 @@ interface EnvConfig {
   /** Per-call timeout (ms). Default: 10000 */
   CB_SOROBAN_TIMEOUT_MS: number;
 
-  // ── ETA cache / routing ────────────────────────────────────────────────────
-  ETA_CACHE_TTL_SECONDS: number;
-  ETA_GEOHASH_PRECISION: number;
-  GOOGLE_MAPS_API_KEY?: string;
+  // ── Merchant webhooks ───────────────────────────────────────────
+  /** Per-request timeout (ms) for a webhook POST. Default: 10000 */
+  WEBHOOK_REQUEST_TIMEOUT_MS: number;
+  /** Maximum delivery attempts (including the first) before an attempt is exhausted. Default: 5 */
+  WEBHOOK_MAX_RETRIES: number;
+  /** Base delay (ms) for webhook retry exponential backoff. Default: 30000 */
+  WEBHOOK_RETRY_BASE_MS: number;
+  /** Maximum delay (ms) cap for webhook retry exponential backoff. Default: 3600000 */
+  WEBHOOK_RETRY_MAX_MS: number;
+  /** Cron expression driving the webhook retry sweep. Default: every minute */
+  WEBHOOK_RETRY_CRON: string;
+  /** Maximum due attempts processed per retry sweep tick. Default: 50 */
+  WEBHOOK_RETRY_BATCH_SIZE: number;
 
-  // ── Indexer lag monitor ────────────────────────────────────────────────────
-  INDEXER_LAG_WEBHOOK_URL: string;
-  INDEXER_LAG_ALERT_THRESHOLD: number;
-  INDEXER_LAG_CHECK_INTERVAL_MS: number;
+  // ── Driver assignment ────────────────────────────────────────────
+  /** Number of times the search radius doubles before giving up. Default: 3 */
+  ASSIGNMENT_RADIUS_EXPANSION_STEPS: number;
+  /** Cron expression driving the auto-assignment sweep for unassigned funded deliveries. Default: every minute */
+  AUTO_ASSIGNMENT_CRON: string;
 
-  // ── Escrow indexer ─────────────────────────────────────────────────────────
-  ESCROW_CONTRACT_ID: string;
-  ESCROW_FUNDED_EVENT_TOPIC: string;
-  ESCROW_MONITOR_CRON: string;
+  // ── Driver rating & penalties ─────────────────────────────────────
+  /** Cron expression driving the driver-rating sweep. Default: hourly */
+  DRIVER_RATING_CRON: string;
 
-  // ── Locations & Socket.io ──────────────────────────────────────────────────
-  LOCATION_DEDUP_TTL_SECONDS: number;
-  LOCATION_MAX_AGE_MS: number;
-  LOCATION_MAX_FUTURE_MS: number;
-  SOCKET_PING_TIMEOUT_MS: number;
-  SOCKET_PING_INTERVAL_MS: number;
-  SOCKET_MAX_MISSED_PONGS: number;
-  SOCKET_MESSAGE_ACK_TIMEOUT_MS: number;
-  SYNC_BATCH_SIZE_LIMIT: number;
-
-  // ── Shutdown ───────────────────────────────────────────────────────────────
-  SHUTDOWN_TIMEOUT_MS: number;
+  // ── Proof of delivery ────────────────────────────────────────────
+  /** Maximum accepted proof-of-delivery image size, in MB. Default: 8 */
+  PROOF_OF_DELIVERY_MAX_SIZE_MB: number;
 }
 
 /**
@@ -223,21 +223,43 @@ const envSchema = z.object({
   ESCROW_FUNDED_EVENT_TOPIC: z.string().trim().min(1).default('escrow_funded'),
   ESCROW_MONITOR_CRON: z.string().trim().min(1).default('*/5 * * * *'),
 
-  // ── Locations & Socket.io ──────────────────────────────────────────────────
-  LOCATION_DEDUP_TTL_SECONDS: numeric(z.coerce.number().int().min(1).default(60)),
-  LOCATION_MAX_AGE_MS: numeric(z.coerce.number().int().min(1).default(300000)),
-  LOCATION_MAX_FUTURE_MS: numeric(z.coerce.number().int().min(0).default(30000)),
-  SOCKET_PING_TIMEOUT_MS: numeric(z.coerce.number().int().min(1).default(20000)),
-  SOCKET_PING_INTERVAL_MS: numeric(z.coerce.number().int().min(1).default(25000)),
-  SOCKET_MAX_MISSED_PONGS: numeric(z.coerce.number().int().min(0).default(2)),
-  SOCKET_MESSAGE_ACK_TIMEOUT_MS: numeric(z.coerce.number().int().min(1).default(15000)),
-  SYNC_BATCH_SIZE_LIMIT: numeric(z.coerce.number().int().min(1).default(500)),
+  // ── Logging ───────────────────────────────────────────────────
+  LOG_DIR: z.string().trim().min(1).default('logs'),
+  LOG_MAX_SIZE: z.string().trim().min(1).default('20m'),
+  LOG_MAX_FILES: z.string().trim().min(1).default('14d'),
+  LOG_ZIPPED_ARCHIVE: z
+    .enum(['true', 'false'])
+    .default('true')
+    .transform((value) => value === 'true'),
+  LOG_DISABLE_FILE: z
+    .enum(['true', 'false'])
+    .default('false')
+    .transform((value) => value === 'true'),
 
-  // ── Shutdown ───────────────────────────────────────────────────────────────
-  SHUTDOWN_TIMEOUT_MS: numeric(z.coerce.number().int().min(1).default(30000)),
+  // ── Soroban circuit breaker ───────────────────────────────────
+  CB_SOROBAN_ERROR_THRESHOLD_PERCENTAGE: z.coerce.number().int().min(1).max(100).default(50),
+  CB_SOROBAN_ROLLING_WINDOW_MS: z.coerce.number().int().min(1000).default(10000),
+  CB_SOROBAN_RESET_TIMEOUT_MS: z.coerce.number().int().min(1000).default(30000),
+  CB_SOROBAN_VOLUME_THRESHOLD: z.coerce.number().int().min(1).default(5),
+  CB_SOROBAN_TIMEOUT_MS: z.coerce.number().int().min(1000).default(10000),
 
-  // ── Logging ────────────────────────────────────────────────────────────────
-  LOG_LEVEL: z.enum(['error', 'warn', 'info', 'http', 'verbose', 'debug', 'silly']).default('info'),
+  // ── Merchant webhooks ───────────────────────────────────────────
+  WEBHOOK_REQUEST_TIMEOUT_MS: z.coerce.number().int().min(1000).default(10000),
+  WEBHOOK_MAX_RETRIES: z.coerce.number().int().min(1).max(20).default(5),
+  WEBHOOK_RETRY_BASE_MS: z.coerce.number().int().min(1000).default(30000),
+  WEBHOOK_RETRY_MAX_MS: z.coerce.number().int().min(1000).default(3600000),
+  WEBHOOK_RETRY_CRON: z.string().trim().min(1).default('* * * * *'),
+  WEBHOOK_RETRY_BATCH_SIZE: z.coerce.number().int().min(1).max(500).default(50),
+
+  // ── Driver assignment ────────────────────────────────────────────
+  ASSIGNMENT_RADIUS_EXPANSION_STEPS: z.coerce.number().int().min(0).max(10).default(3),
+  AUTO_ASSIGNMENT_CRON: z.string().trim().min(1).default('* * * * *'),
+
+  // ── Driver rating & penalties ─────────────────────────────────────
+  DRIVER_RATING_CRON: z.string().trim().min(1).default('0 * * * *'),
+
+  // ── Proof of delivery ────────────────────────────────────────────
+  PROOF_OF_DELIVERY_MAX_SIZE_MB: z.coerce.number().int().min(1).default(8),
 });
 
 let env: EnvConfig;
