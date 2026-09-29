@@ -1,5 +1,6 @@
 import { Server, Socket, Namespace } from 'socket.io';
 import { Server as HttpServer } from 'http';
+import env from '../config/env';
 import registerSocketHandlers from './socketController';
 import logger from '../config/logger';
 import socketAuth from '../middlewares/socketAuth';

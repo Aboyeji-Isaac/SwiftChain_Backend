@@ -1,3 +1,4 @@
+import env from '../config/env';
 import logger from '../config/logger';
 import { getRedisClient } from '../config/redis';
 import { buildEtaCacheKey } from '../utils/etaCacheKey';

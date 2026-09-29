@@ -1,5 +1,6 @@
 import { Types } from 'mongoose';
 import { Server as SocketIOServer } from 'socket.io';
+import env from '../config/env';
 import logger from '../config/logger';
 import { LocationUpdate } from '../models/LocationUpdate';
 import { redisClient } from '../config/redis';
