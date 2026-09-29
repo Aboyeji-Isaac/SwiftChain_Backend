@@ -43,9 +43,27 @@ jobs:
       - name: Build
         run: pnpm run build
 
-      - name: Run Tests
-        run: pnpm test
+      - name: Run Tests with Coverage
+        run: pnpm run test:coverage
         env:
           CI: true
           MONGO_URI: mongodb://localhost:27017/swiftchain_test
-          JWT_SECRET: test_secret
+          # Must match tests/jest.setup.ts and the JWT_SECRET constant hardcoded
+          # in the token-signing test helpers (16-char env.ts minimum).
+          JWT_SECRET: test-secret-key-16chars
+
+      - name: Upload Coverage Reports
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: coverage-report
+          path: coverage/
+          retention-days: 30
+
+      - name: Comment Coverage Report on PR
+        if: github.event_name == 'pull_request' && always()
+        uses: romeovs/lcov-reporter-action@v0.3.1
+        with:
+          lcov-file: ./coverage/lcov.info
+          github-token: ${{ secrets.GITHUB_TOKEN }}
+        continue-on-error: true

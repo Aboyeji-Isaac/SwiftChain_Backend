@@ -1,0 +1,28 @@
+feat(#112): Implement Socket.IO load tests for 10,000 concurrent connections
+
+- Add metrics collection service (/api/v1/socket-metrics) with real-time latency tracking
+- Create k6 load test scenario with 10k VU ramp profile and latency assertions
+- Implement optimized data seeding scripts (default 25/25/50, 10k variants)
+- Integrate metrics recording in Socket.IO connection and location handlers
+- Add comprehensive README documentation with usage guides and troubleshooting
+- Include socketMetricsClient helper library for k6 metric assertions
+
+Architecture:
+- Controller -> Service pattern (socketMetricsController, socketMetricsService)
+- In-memory metrics with rolling latency window (no external dependencies)
+- Setup/teardown phases in k6 test for endpoint validation and output summary
+
+Deliverables:
+- socket-load.js: k6 scenario (stages: 0->2.5k->5k->10k VUs, soak 60s, drain 30s)
+- socketMetricsService: In-memory collection with p50/p95/p99 latency percentiles
+- seedLoadTestData10k.ts: Batch insertion with progress for large fixtures
+- Updated README with complete Socket.IO test documentation
+- SOCKET_IO_LOAD_TEST_PR.md: Comprehensive PR summary with deployment guidance
+
+Scripts:
+- npm run seed:10k: Seed 10k drivers, 5k deliveries, 100 customers
+- npm run test:socket: Run k6 load test
+- npm run test:socket:10k: Optimized for 10k concurrent test
+
+All code follows existing conventions: strict TypeScript, error handling,
+logging with context, production-quality implementation.

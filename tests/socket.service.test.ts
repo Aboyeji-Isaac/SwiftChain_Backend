@@ -23,6 +23,14 @@ jest.mock('../src/config/logger', () => ({
   debug: jest.fn(),
 }));
 
+// Mock authService for token validation tests
+jest.mock('../src/services/authService', () => ({
+  verifyToken: jest.fn(),
+  getUserById: jest.fn(),
+}));
+
+import authService from '../src/services/authService';
+
 /**
  * Build a minimal mock TypedSocket with only the fields the service needs.
  */
@@ -329,6 +337,79 @@ describe('SocketService', () => {
       expect(socket.emit).toHaveBeenCalledTimes(2);
 
       service.stopHealthChecks();
+    });
+  });
+
+  // ── validateSocketToken ─────────────────────────────────────────────────────
+
+  describe('validateSocketToken', () => {
+    it('returns true when socket has no token or userId', async () => {
+      const socket = makeMockSocket('no-token');
+      const result = await service.validateSocketToken(socket);
+      expect(result).toBe(true);
+    });
+
+    it('returns true for a valid token with an active user', async () => {
+      const socket = makeMockSocket('valid-token');
+      socket.data.token = 'valid-token';
+      socket.data.userId = 'user-1';
+
+      (authService.verifyToken as jest.Mock).mockReturnValue({ userId: 'user-1' });
+      (authService.getUserById as jest.Mock).mockResolvedValue({ status: 'active' });
+
+      const result = await service.validateSocketToken(socket);
+      expect(result).toBe(true);
+      expect(authService.verifyToken).toHaveBeenCalledWith('valid-token');
+      expect(authService.getUserById).toHaveBeenCalledWith('user-1');
+    });
+
+    it('returns false for an expired or invalid token', async () => {
+      const socket = makeMockSocket('expired-token');
+      socket.data.token = 'expired-token';
+      socket.data.userId = 'user-1';
+
+      (authService.verifyToken as jest.Mock).mockImplementation(() => {
+        throw new Error('Token expired');
+      });
+
+      const result = await service.validateSocketToken(socket);
+      expect(result).toBe(false);
+    });
+
+    it('returns false when the user does not exist', async () => {
+      const socket = makeMockSocket('no-user');
+      socket.data.token = 'valid-token';
+      socket.data.userId = 'user-missing';
+
+      (authService.verifyToken as jest.Mock).mockReturnValue({ userId: 'user-missing' });
+      (authService.getUserById as jest.Mock).mockResolvedValue(null);
+
+      const result = await service.validateSocketToken(socket);
+      expect(result).toBe(false);
+    });
+
+    it('returns false for a suspended user', async () => {
+      const socket = makeMockSocket('suspended-user');
+      socket.data.token = 'valid-token';
+      socket.data.userId = 'user-suspended';
+
+      (authService.verifyToken as jest.Mock).mockReturnValue({ userId: 'user-suspended' });
+      (authService.getUserById as jest.Mock).mockResolvedValue({ status: 'suspended' });
+
+      const result = await service.validateSocketToken(socket);
+      expect(result).toBe(false);
+    });
+
+    it('returns false for a banned user', async () => {
+      const socket = makeMockSocket('banned-user');
+      socket.data.token = 'valid-token';
+      socket.data.userId = 'user-banned';
+
+      (authService.verifyToken as jest.Mock).mockReturnValue({ userId: 'user-banned' });
+      (authService.getUserById as jest.Mock).mockResolvedValue({ status: 'banned' });
+
+      const result = await service.validateSocketToken(socket);
+      expect(result).toBe(false);
     });
   });
 });

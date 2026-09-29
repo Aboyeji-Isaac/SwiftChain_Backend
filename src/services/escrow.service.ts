@@ -1,17 +1,23 @@
 import { Types } from 'mongoose';
 import httpStatus from 'http-status-codes';
-import Escrow, { IEscrow, EscrowLockStatus } from '../models/Escrow';
+import Escrow, { IEscrow, EscrowStatus } from '../models/Escrow';
 import Delivery, { DeliveryStatus } from '../models/Delivery';
 import { AppError } from '../utils/AppError';
 import logger from '../config/logger';
 import { withLock } from '../config/redis';
+import { proofOfDeliveryService } from './proofOfDeliveryService';
+import { sorobanService } from '../blockchain/soroban.service';
+import env from '../config/env';
+import { nowUTC } from '../utils/dateUtils';
 
 /** Data extracted from an on-chain `escrow_funded` contract event. */
 export interface EscrowFundedInput {
   contractId: string;
   deliveryId: string;
   amount: number;
+  /** Asset code of the escrowed funds as reported by the contract (e.g. `XLM`). */
   asset: string;
+  /** Stellar account that funded the escrow, when present in the event. */
   fundedBy?: string;
   transactionHash: string;
   ledger?: number;
@@ -28,6 +34,38 @@ export interface ReleaseEscrowInput {
   /** User or system identifier initiating the release. */
   releasedBy?: string;
 }
+
+/** Result of one pass of the expired-escrow scan. */
+export interface ScanExpiredEscrowsResult {
+  scannedAt: string;
+  flaggedCount: number;
+  flaggedEscrows: IEscrow[];
+}
+
+/** Input for listing escrows flagged as expired for admin review. */
+export interface GetFlaggedEscrowsInput {
+  page?: number;
+  limit?: number;
+}
+
+/** Paginated result for listing escrows flagged as expired. */
+export interface GetFlaggedEscrowsResult {
+  escrows: IEscrow[];
+  total: number;
+  page: number;
+  limit: number;
+  totalPages: number;
+}
+
+/** Input for an admin resolving a flagged (expired) escrow. */
+export interface ResolveEscrowInput {
+  escrowId: string;
+  adminId: string;
+  notes: string;
+}
+
+/** Largest page size accepted when listing flagged escrows. */
+const FLAGGED_ESCROWS_MAX_LIMIT = 100;
 
 export class EscrowService {
   /**
@@ -66,21 +104,24 @@ export class EscrowService {
 
     if (escrow) {
       escrow.amount = input.amount;
-      escrow.asset = input.asset;
-      escrow.fundedBy = input.fundedBy;
-      escrow.lockStatus = EscrowLockStatus.LOCKED;
+      escrow.assetCode = input.asset;
+      escrow.payerAddress = input.fundedBy;
+      escrow.status = EscrowStatus.LOCKED;
       escrow.lockedAt = escrow.lockedAt ?? new Date();
+      escrow.expiresAt = this.computeExpiresAt(escrow.lockedAt);
       escrow.transactions.push(transaction);
       await escrow.save();
     } else {
+      const lockedAt = new Date();
       escrow = await Escrow.create({
         delivery: delivery._id,
         contractId: input.contractId,
         amount: input.amount,
-        asset: input.asset,
-        fundedBy: input.fundedBy,
-        lockStatus: EscrowLockStatus.LOCKED,
-        lockedAt: new Date(),
+        assetCode: input.asset,
+        payerAddress: input.fundedBy,
+        status: EscrowStatus.LOCKED,
+        lockedAt,
+        expiresAt: this.computeExpiresAt(lockedAt),
         transactions: [transaction],
       });
     }
@@ -171,29 +212,36 @@ export class EscrowService {
         throw new AppError('Escrow not found', httpStatus.NOT_FOUND);
       }
 
-      // Check if the escrow is already released
-      if (escrow.lockStatus === EscrowLockStatus.RELEASED) {
-        logger.warn(
-          `[EscrowService] Escrow already released — id=${escrowId} status=${escrow.lockStatus}`,
-        );
-        throw new AppError('Escrow has already been released', httpStatus.CONFLICT);
-      }
-
-      // Check if the escrow is in a valid state to be released
-      if (escrow.lockStatus !== EscrowLockStatus.LOCKED) {
-        throw new AppError(
-          `Escrow cannot be released from status: ${escrow.lockStatus}`,
-          httpStatus.CONFLICT,
-        );
-      }
-
-      // Check if this transaction has already been recorded (idempotency)
+      // Check if this transaction has already been recorded (idempotency).
+      // This runs before the status guards so replaying a release event that
+      // already settled the escrow stays a no-op instead of a conflict.
       if (escrow.transactions.some((tx) => tx.hash === transactionHash)) {
         logger.info(
           `[EscrowService] Skipping already-processed release tx=${transactionHash} for escrow=${escrowId}`,
         );
         return escrow;
       }
+
+      // Check if the escrow is already released
+      if (escrow.status === EscrowStatus.RELEASED) {
+        logger.warn(
+          `[EscrowService] Escrow already released — id=${escrowId} status=${escrow.status}`,
+        );
+        throw new AppError('Escrow has already been released', httpStatus.CONFLICT);
+      }
+
+      // Check if the escrow is in a valid state to be released
+      if (escrow.status !== EscrowStatus.LOCKED) {
+        throw new AppError(
+          `Escrow cannot be released from status: ${escrow.status}`,
+          httpStatus.CONFLICT,
+        );
+      }
+
+      // Proof of delivery must be on record before funds can be released —
+      // this is the enforcement point regardless of which path (API call,
+      // indexer event) triggers a release.
+      await proofOfDeliveryService.assertProofOfDeliveryExists(String(escrow.delivery));
 
       // Record the release transaction
       const releaseTransaction = {
@@ -203,7 +251,7 @@ export class EscrowService {
         recordedAt: new Date(),
       };
 
-      escrow.lockStatus = EscrowLockStatus.RELEASED;
+      escrow.status = EscrowStatus.RELEASED;
       escrow.releasedAt = new Date();
       escrow.transactions.push(releaseTransaction);
 
@@ -215,18 +263,165 @@ export class EscrowService {
         delivery.status = DeliveryStatus.COMPLETED;
         await delivery.save();
         logger.debug(
-          `[EscrowService] Delivery status updated to COMPLETED — delivery=${String(escrow.delivery)}`,
+          `[EscrowService] Delivery status updated to COMPLETED — delivery=${String(
+            escrow.delivery,
+          )}`,
         );
       }
 
       logger.info(
         `[EscrowService] Escrow released successfully — id=${escrowId} ` +
-          `contract=${escrow.contractId} tx=${transactionHash} releasedBy=${releasedBy ?? 'system'}`,
+          `contract=${escrow.contractId} tx=${transactionHash} releasedBy=${
+            releasedBy ?? 'system'
+          }`,
       );
 
       return escrow;
     });
   }
+
+  /**
+   * Scan for escrows whose lock TTL has elapsed and flag them as `expired`.
+   *
+   * Called on a recurring schedule by the escrow monitor cron job. Runs a
+   * single `updateMany` for efficiency, then reloads the flagged documents for
+   * logging/reporting purposes.
+   *
+   * The current Soroban ledger sequence is stamped onto each flagged escrow so
+   * there is an on-chain-anchored audit trail of when the expiry was detected.
+   * A degraded/unavailable RPC node only downgrades the audit stamp to
+   * "unknown" — the scan itself still flags the escrows.
+   */
+  async scanForExpiredEscrows(): Promise<ScanExpiredEscrowsResult> {
+    const now = nowUTC();
+
+    const expiredCandidates = await Escrow.find({
+      status: EscrowStatus.LOCKED,
+      expiresAt: { $lte: now },
+    });
+
+    if (expiredCandidates.length === 0) {
+      return { scannedAt: now.toISOString(), flaggedCount: 0, flaggedEscrows: [] };
+    }
+
+    let flaggedLedger: number | undefined;
+    try {
+      const latestLedger = await sorobanService.getLatestLedger();
+      // getLatestLedger resolves to a DegradedLedgerResult when the circuit
+      // breaker is open — treat that as "ledger unknown" rather than a number.
+      flaggedLedger = typeof latestLedger === 'number' ? latestLedger : undefined;
+    } catch (err) {
+      const message = err instanceof Error ? err.message : 'Unknown error';
+      logger.warn(
+        `[EscrowMonitor] Failed to fetch latest Soroban ledger for audit stamp: ${message}`,
+      );
+    }
+
+    const idsToFlag = expiredCandidates.map((escrow) => escrow._id);
+
+    await Escrow.updateMany(
+      { _id: { $in: idsToFlag }, status: EscrowStatus.LOCKED },
+      {
+        $set: {
+          status: EscrowStatus.EXPIRED,
+          flaggedAt: now,
+          ...(flaggedLedger !== undefined ? { flaggedLedger } : {}),
+        },
+      },
+    );
+
+    const flaggedEscrows = await Escrow.find({
+      _id: { $in: idsToFlag },
+      status: EscrowStatus.EXPIRED,
+    });
+
+    logger.info(
+      `[EscrowMonitor] Flagged ${flaggedEscrows.length} expired escrow(s) at ledger=${
+        flaggedLedger ?? 'unknown'
+      }`,
+    );
+
+    return {
+      scannedAt: now.toISOString(),
+      flaggedCount: flaggedEscrows.length,
+      flaggedEscrows,
+    };
+  }
+
+  /**
+   * Retrieve a paginated list of expired escrows flagged for admin review,
+   * newest flags first.
+   */
+  async getFlaggedEscrows(input: GetFlaggedEscrowsInput): Promise<GetFlaggedEscrowsResult> {
+    const page = Math.max(1, input.page ?? 1);
+    const limit = Math.min(FLAGGED_ESCROWS_MAX_LIMIT, Math.max(1, input.limit ?? 20));
+    const skip = (page - 1) * limit;
+
+    const filter = { status: EscrowStatus.EXPIRED };
+
+    const [escrows, total] = await Promise.all([
+      Escrow.find(filter).sort({ flaggedAt: -1 }).skip(skip).limit(limit),
+      Escrow.countDocuments(filter),
+    ]);
+
+    return {
+      escrows,
+      total,
+      page,
+      limit,
+      totalPages: Math.ceil(total / limit) || 0,
+    };
+  }
+
+  /**
+   * Marks a flagged (expired) escrow as resolved by an administrator.
+   *
+   * Only escrows currently in the `expired` state can be resolved — resolving
+   * an active, released, refunded or already-resolved escrow is a conflict.
+   * The admin id and notes are recorded on the escrow as an audit trail.
+   */
+  async resolveEscrow(input: ResolveEscrowInput): Promise<IEscrow> {
+    const { escrowId, adminId, notes } = input;
+
+    if (!Types.ObjectId.isValid(escrowId)) {
+      throw new AppError('Invalid escrow ID format.', httpStatus.BAD_REQUEST);
+    }
+
+    const escrow = await Escrow.findById(escrowId);
+    if (!escrow) {
+      throw new AppError('Escrow not found.', httpStatus.NOT_FOUND);
+    }
+
+    if (escrow.status !== EscrowStatus.EXPIRED) {
+      throw new AppError('Only escrows flagged as expired can be resolved.', httpStatus.CONFLICT);
+    }
+
+    escrow.status = EscrowStatus.RESOLVED;
+    escrow.resolvedAt = new Date();
+    escrow.resolvedBy = adminId;
+    escrow.resolutionNotes = notes;
+
+    await escrow.save();
+
+    logger.info(
+      `[EscrowMonitor] Admin ${adminId} resolved expired escrow ${escrowId}. Notes: "${notes}"`,
+    );
+
+    return escrow;
+  }
+
+  /**
+   * Derive the lock expiry timestamp from the lock time.
+   *
+   * Escrow locks are time-boxed (see the escrow TTL configuration); stamping
+   * `expiresAt` at lock time lets the monitor's scan find stale locks with a
+   * plain indexed `$lte` query instead of computing ages on the fly.
+   */
+  private computeExpiresAt(lockedAt: Date): Date {
+    const ttlMs = env.ESCROW_LOCK_TTL_SECONDS * 1000;
+    return new Date(lockedAt.getTime() + ttlMs);
+  }
 }
 
 export const escrowService = new EscrowService();
+export default escrowService;

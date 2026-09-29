@@ -1,5 +1,6 @@
 packages:
   - '.'
 allowBuilds:
+  '@scarf/scarf': set this to true or false
   mongodb-memory-server: true
   unrs-resolver: true

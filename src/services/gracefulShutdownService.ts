@@ -2,17 +2,12 @@ import http from 'http';
 import env from '../config/env';
 import logger from '../config/logger';
 import { disconnectDatabase, waitForActiveTransactions } from '../config/database';
-import {
-  beginRequestDrain,
-  getInFlightRequestCount,
-} from '../middleware/requestTracker';
+import { beginRequestDrain, getInFlightRequestCount } from '../middleware/requestTracker';
 import { stopIndexerLagMonitor } from './monitorService';
 import { stopEscrowMonitorService } from './escrowMonitorService';
 import { stopEventPoller } from './eventPoller';
-import {
-  shutdownSocketServer,
-  TypedServer,
-} from '../sockets/connectionHandler';
+import { shutdownSocketServer, TypedServer } from '../sockets/connectionHandler';
+import env from '../config/env';
 
 /** Polling interval while waiting for in-flight HTTP / DB work to finish. */
 const DRAIN_POLL_MS = 100;
@@ -73,9 +68,7 @@ export class GracefulShutdownService {
     logger.info(`[Shutdown] Received ${signal} — beginning graceful drain`);
 
     const forceTimer = setTimeout(() => {
-      logger.error(
-        `[Shutdown] Timed out after ${this.timeoutMs}ms — forcing exit`,
-      );
+      logger.error(`[Shutdown] Timed out after ${this.timeoutMs}ms — forcing exit`);
       this.exitFn(1);
     }, this.timeoutMs);
     forceTimer.unref?.();
@@ -159,9 +152,7 @@ export class GracefulShutdownService {
 
     const remaining = getInFlightRequestCount();
     if (remaining > 0) {
-      logger.warn(
-        `[Shutdown] Proceeding with ${remaining} in-flight HTTP request(s) still open`,
-      );
+      logger.warn(`[Shutdown] Proceeding with ${remaining} in-flight HTTP request(s) still open`);
     } else {
       logger.info('[Shutdown] In-flight HTTP requests drained');
     }
@@ -195,9 +186,7 @@ function sleep(ms: number): Promise<void> {
  * Wire SIGTERM / SIGINT to the shutdown service. Replaces ad-hoc handlers
  * so a single path owns process teardown.
  */
-export const registerShutdownHandlers = (
-  service: GracefulShutdownService,
-): void => {
+export const registerShutdownHandlers = (service: GracefulShutdownService): void => {
   const onSignal = (signal: string): void => {
     void service.shutdown(signal);
   };

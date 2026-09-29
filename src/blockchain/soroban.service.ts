@@ -58,31 +58,47 @@ export class SorobanService {
   private readonly client: StellarRpc.Server;
 
   /**
-   * Shared circuit breaker for all Soroban RPC operations.
+   * Circuit breaker for this instance's Soroban RPC operations.
    * Typed as `CircuitBreaker<[() => Promise<unknown>], unknown>` because we
    * use `fireWithBreaker` to pass a different action on each call.
    */
   private readonly breaker: CircuitBreaker<[() => Promise<unknown>], unknown>;
+
+  /** Counter so each service instance owns an isolated breaker. */
+  private static instanceCount = 0;
 
   constructor(client: StellarRpc.Server = sorobanRpcClient) {
     this.client = client;
 
     this.breaker = createCircuitBreaker<[() => Promise<unknown>], unknown>(
       {
-        name: 'soroban-rpc',
+        // A unique name per instance keeps breaker statistics isolated (a
+        // tripped breaker in one context must not short-circuit another).
+        name: `soroban-rpc-${++SorobanService.instanceCount}`,
         errorThresholdPercentage: env.CB_SOROBAN_ERROR_THRESHOLD_PERCENTAGE,
         rollingWindowMs: env.CB_SOROBAN_ROLLING_WINDOW_MS,
         resetTimeoutMs: env.CB_SOROBAN_RESET_TIMEOUT_MS,
         volumeThreshold: env.CB_SOROBAN_VOLUME_THRESHOLD,
         timeoutMs: env.CB_SOROBAN_TIMEOUT_MS,
       },
-      // Fallback: return a sentinel so callers know the result is degraded.
-      (): DegradedLedgerResult => ({
-        degraded: true,
-        reason:
-          'Soroban RPC circuit is OPEN — the node is temporarily unreachable. ' +
-          'The system will automatically retry when the circuit recovers.',
-      }),
+      // Fallback: opossum invokes it for *any* failure, not only while the
+      // circuit is OPEN. Only swallow the error into a degraded sentinel when
+      // the circuit really is OPEN/half-open; otherwise rethrow so callers
+      // (and tests) see the original RPC failure.
+      (...fallbackArgs: unknown[]): DegradedLedgerResult => {
+        if (this.breaker.opened || this.breaker.halfOpen) {
+          return {
+            degraded: true,
+            reason:
+              'Soroban RPC circuit is OPEN — the node is temporarily unreachable. ' +
+              'The system will automatically retry when the circuit recovers.',
+          };
+        }
+        const err = fallbackArgs[fallbackArgs.length - 1];
+        // Rethrow the original failure untouched so callers can distinguish
+        // transient RPC errors from breaker state.
+        throw err;
+      },
     );
   }
 
@@ -105,8 +121,7 @@ export class SorobanService {
     operationName: string,
     fn: () => Promise<T>,
   ): Promise<T | DegradedLedgerResult> {
-    const retryWrapped = (): Promise<T> =>
-      withRetry(fn, { ...this.retryOptions, operationName });
+    const retryWrapped = (): Promise<T> => withRetry(fn, { ...this.retryOptions, operationName });
 
     return fireWithBreaker(
       this.breaker as CircuitBreaker<[() => Promise<T>], T | DegradedLedgerResult>,
@@ -144,7 +159,7 @@ export class SorobanService {
         (healthResult as DegradedLedgerResult).degraded ||
         (ledgerResult as DegradedLedgerResult).degraded
       ) {
-        const latencyMs = Date.now() - start;
+        const _latencyMs = Date.now() - start;
         logger.warn(`[Soroban] Connectivity check degraded — circuit is OPEN`);
         return {
           connected: false,
@@ -202,9 +217,8 @@ export class SorobanService {
    *          throws (should not happen in practice).
    */
   public async getLatestLedger(): Promise<number | DegradedLedgerResult> {
-    const result = await this.callWithRetryAndBreaker(
-      'getLatestLedger',
-      () => this.client.getLatestLedger(),
+    const result = await this.callWithRetryAndBreaker('getLatestLedger', () =>
+      this.client.getLatestLedger(),
     );
 
     if ((result as DegradedLedgerResult).degraded) {
@@ -220,13 +234,8 @@ export class SorobanService {
    * @returns The raw `getNetwork` response, or a {@link DegradedLedgerResult}
    *          when the circuit is OPEN.
    */
-  public async getNetworkInfo(): Promise<
-    StellarRpc.Api.GetNetworkResponse | DegradedLedgerResult
-  > {
-    const result = await this.callWithRetryAndBreaker(
-      'getNetwork',
-      () => this.client.getNetwork(),
-    );
+  public async getNetworkInfo(): Promise<StellarRpc.Api.GetNetworkResponse | DegradedLedgerResult> {
+    const result = await this.callWithRetryAndBreaker('getNetwork', () => this.client.getNetwork());
 
     return result as StellarRpc.Api.GetNetworkResponse | DegradedLedgerResult;
   }

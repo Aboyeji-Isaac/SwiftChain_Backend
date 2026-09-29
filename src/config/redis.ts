@@ -18,6 +18,13 @@ export const redisClient = new Redis(env.REDIS_URL, {
 });
 
 /**
+ * Helper to safely get the active Redis client.
+ */
+export function getRedisClient(): Redis | null {
+  return redisClient;
+}
+
+/**
  * Redlock instance for distributed lock management across multiple Redis nodes.
  * Currently configured with a single Redis instance, but can be extended to
  * support multiple Redis clusters for higher availability.
@@ -115,10 +122,7 @@ export interface LockOptions {
  *   await lock.release();
  * }
  */
-export const acquireLock = async (
-  resource: string,
-  options: LockOptions = {},
-): Promise<Lock> => {
+export const acquireLock = async (resource: string, options: LockOptions = {}): Promise<Lock> => {
   const ttl = options.ttl ?? env.REDIS_LOCK_TTL_MS;
   const retryCount = options.retryCount ?? env.REDIS_LOCK_RETRY_COUNT;
   const retryDelay = options.retryDelay ?? env.REDIS_LOCK_RETRY_DELAY_MS;

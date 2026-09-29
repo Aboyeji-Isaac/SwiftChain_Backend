@@ -3,6 +3,7 @@ import type { HelmetOptions } from 'helmet';
 import type { Request } from 'express';
 import env from './env';
 import logger from './logger';
+import env from './env';
 
 /**
  * Error raised when a request originates from a disallowed origin.

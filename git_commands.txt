@@ -1,0 +1,9 @@
+git add stryker.conf.json package.json .gitignore MUTATION_TESTING_SETUP.md MUTATION_TESTING_PR.md commit-mutation-testing.sh
+git commit -m "feat: Add mutation testing (StrykerJS) for service layer - Issue #114
+
+- Create stryker.conf.json with service-layer-only mutation scope
+- Configure Jest runner with TypeScript checker plugin  
+- Set break threshold at 60% baseline
+- Add test:mutation npm script
+- Update .gitignore for Stryker artifacts
+- Include comprehensive setup and PR documentation"

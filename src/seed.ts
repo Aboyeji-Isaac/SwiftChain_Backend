@@ -1,6 +1,7 @@
 import mongoose from 'mongoose';
 import env from './config/env';
 import { Delivery } from './models/Delivery';
+import env from './config/env';
 
 const MONGODB_URI = env.MONGODB_URI;
 

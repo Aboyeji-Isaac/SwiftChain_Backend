@@ -2,6 +2,7 @@ import mongoose, { Schema } from 'mongoose';
 import bcrypt from 'bcryptjs';
 import env from '../config/env';
 import { IUser, UserRole, UserStatus } from '../interfaces/IUser';
+import env from '../config/env';
 
 const userSchema = new Schema<IUser>(
   {
@@ -66,6 +67,17 @@ const userSchema = new Schema<IUser>(
       type: String,
       trim: true,
     },
+    isDeleted: {
+      type: Boolean,
+      default: false,
+    },
+    deletedAt: {
+      type: Date,
+      default: null,
+    },
+    deletedBy: {
+      type: String,
+    },
   },
   {
     timestamps: true,
@@ -101,6 +113,24 @@ userSchema.methods.comparePassword = async function (candidatePassword: string):
   return bcrypt.compare(candidatePassword, this.password);
 };
 
+// Soft delete instance method
+userSchema.methods.softDelete = async function (userId?: string): Promise<IUser> {
+  this.isDeleted = true;
+  this.deletedAt = new Date();
+  if (userId) {
+    this.deletedBy = userId;
+  }
+  return this.save();
+};
+
+// Restore instance method
+userSchema.methods.restore = async function (): Promise<IUser> {
+  this.isDeleted = false;
+  this.deletedAt = null;
+  this.deletedBy = undefined;
+  return this.save();
+};
+
 // Index for efficient email lookups (login, registration duplicate checks).
 userSchema.index({ email: 1 });
 
@@ -109,6 +139,9 @@ userSchema.index({ email: 1 });
 // blocks suspended/banned accounts); this compound index supports filtering
 // users by role and/or status, e.g. an admin listing all suspended drivers.
 userSchema.index({ role: 1, status: 1 });
+
+// Compound index for filtering active/non-deleted users
+userSchema.index({ isDeleted: 1, status: 1 });
 
 const User = mongoose.model<IUser>('User', userSchema);
 

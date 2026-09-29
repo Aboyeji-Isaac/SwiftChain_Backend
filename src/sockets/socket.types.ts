@@ -16,6 +16,8 @@ export interface SocketConnectionMeta {
   missedPongs: number;
   /** Rooms the socket is currently a member of */
   rooms: string[];
+  /** Optional JWT expiration timestamp (ms since epoch) */
+  tokenExp?: number;
 }
 
 /**
@@ -41,6 +43,35 @@ export interface DisconnectPayload {
   userId?: string;
   reason: string;
   connectedDurationMs: number;
+}
+
+/**
+ * Payload emitted on `auth_expired` when the server detects an expired
+ * or invalid JWT during an active socket session.
+ */
+export interface AuthExpiredPayload {
+  message: string;
+  gracePeriodMs: number;
+}
+
+/**
+ * Payload sent by the client on `auth_refresh` with a new JWT token.
+ */
+export interface RefreshTokenPayload {
+  /** New JWT token. */
+  token: string;
+}
+
+export interface AuthRefreshPayload {
+  token: string;
+}
+
+/**
+ * Acknowledgement emitted back on `auth_refresh_ack`.
+ */
+export interface AuthRefreshAckPayload {
+  success: boolean;
+  error?: string;
 }
 
 // ─── Offline sync types ───────────────────────────────────────────────────────
@@ -164,6 +195,10 @@ export interface ServerToClientEvents {
   'location:update': (payload: LocationBroadcastPayload) => void;
   /** Ack sent back to the driver after a live location update is processed. */
   location_update_ack: (payload: LocationUpdateAck) => void;
+  /** Notify client that authentication token has expired */
+  auth_expired: (payload?: AuthExpiredPayload) => void;
+  /** Acknowledge a client's token refresh attempt */
+  auth_refresh_ack: (payload: AuthRefreshAckPayload) => void;
 }
 
 /**
@@ -179,6 +214,10 @@ export interface ClientToServerEvents {
   location_sync: (payload: LocationSyncPayload) => void;
   /** Fired by driver to broadcast a live GPS fix to a delivery room. */
   driver_location_update: (payload: DriverLocationUpdatePayload) => void;
+  /** Fired by client to submit a refreshed JWT without reconnecting. */
+  auth_refresh: (payload: AuthRefreshPayload) => void;
+  /** Legacy token-refresh event used by older clients. */
+  refresh_token: (payload: RefreshTokenPayload) => void;
 }
 
 /**
@@ -193,7 +232,10 @@ export interface InterServerEvents {
  */
 export interface SocketData {
   userId?: string;
+  token?: string;
   connectedAt: number;
+  /** JWT expiration timestamp in ms */
+  tokenExp?: number;
 }
 
 /**

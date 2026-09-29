@@ -4,11 +4,12 @@ import { StatusCodes } from 'http-status-codes';
 import User from '../models/User';
 import type { IUser } from '../interfaces/IUser';
 import AppError from '../utils/AppError';
+import env from '../config/env';
 
 // ─── JWT payload shape ────────────────────────────────────────────────────────
 
 interface JwtPayload {
-  userId: string;  // Changed from 'id' to 'userId' to match login route
+  userId: string; // Changed from 'id' to 'userId' to match login route
   iat?: number;
   exp?: number;
 }
@@ -38,7 +39,7 @@ const authenticate = async (req: Request, _res: Response, next: NextFunction): P
     const token = authHeader.split(' ')[1];
 
     // 2. Verify and decode the JWT
-    const secret = process.env.JWT_SECRET;
+    const secret = env.JWT_SECRET;
     if (!secret) {
       throw new AppError(
         'Server misconfiguration: JWT secret not set.',

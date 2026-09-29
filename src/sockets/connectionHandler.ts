@@ -6,6 +6,7 @@ import { socketService } from './socket.service';
 import { registerSyncHandler } from './syncHandler';
 import { registerLocationHandler } from './locationHandler';
 import { messageQueueService } from './messageQueue';
+import socketMetricsService from '../services/socketMetricsService';
 import {
   PongPayload,
   ServerToClientEvents,
@@ -14,6 +15,8 @@ import {
   SocketData,
   TypedSocket,
 } from './socket.types';
+import jwt from 'jsonwebtoken';
+import env from '../config/env';
 
 /**
  * Typed Socket.IO server alias used throughout the sockets layer.
@@ -54,21 +57,52 @@ export function initializeSocketServer(httpServer: HttpServer): TypedServer {
 
   // ─── Per-connection setup ──────────────────────────────────────────────────
   io.on('connection', (socket: TypedSocket) => {
-    // Optionally extract userId from auth handshake data
-    const userId = extractUserId(socket);
+    // Record connection in metrics
+    socketMetricsService.recordConnection();
 
-    // Store userId on the socket data for easy access later
+    // Extract authentication info from handshake
+    const { userId, tokenExp } = extractAuthInfo(socket);
+
+    // Store auth data on socket data
     socket.data.connectedAt = Date.now();
-    socket.data.userId = userId;
+    if (userId) socket.data.userId = userId;
+    if (tokenExp) (socket.data as any).tokenExp = tokenExp;
 
-    // Register the connection in the service layer
-    socketService.registerConnection(socket, userId);
+    // Register the connection in the service layer with token expiration
+    socketService.registerConnection(socket, userId, tokenExp);
 
     // ── offline sync handler ─────────────────────────────────────────────────
     registerSyncHandler(socket);
 
     // ── real-time location broadcast handler ─────────────────────────────────
     registerLocationHandler(io, socket);
+
+    // ── token refresh handler ─────────────────────────────────────────────────────
+    socket.on('refresh_token', (payload: { token: string }) => {
+      const token = payload?.token;
+      if (!token) {
+        logger.warn(`[Socket] refresh_token missing token – socketId=${socket.id}`);
+        socket.emit('auth_expired');
+        socket.disconnect(true);
+        return;
+      }
+      try {
+        const rawToken = token.startsWith('Bearer ') ? token.slice(7) : token;
+        const decoded = jwt.verify(rawToken, env.JWT_SECRET) as { userId?: string; exp?: number };
+        const newExp = typeof decoded.exp === 'number' ? decoded.exp * 1000 : undefined;
+        if (newExp) {
+          (socket.data as any).tokenExp = newExp;
+          socketService.updateTokenExpiration(socket.id, newExp);
+          logger.info(`[Socket] Token refreshed for socketId=${socket.id}`);
+        }
+      } catch (err) {
+        logger.warn(
+          `Token refresh verification failed for socket ${socket.id}: ${(err as Error).message}`,
+        );
+        socket.emit('auth_expired');
+        socket.disconnect(true);
+      }
+    });
 
     // ── pong handler ────────────────────────────────────────────────────────
     socket.on('pong', (payload: PongPayload) => {
@@ -106,6 +140,9 @@ export function initializeSocketServer(httpServer: HttpServer): TypedServer {
 
     // ── disconnect handler ───────────────────────────────────────────────────
     socket.on('disconnect', (reason: string) => {
+      // Record disconnection in metrics
+      socketMetricsService.recordDisconnection();
+
       socketService.handleDisconnect(socket, reason);
     });
 
@@ -161,25 +198,52 @@ export async function shutdownSocketServer(io: TypedServer): Promise<void> {
  * Extract an authenticated user ID from the socket handshake.
  *
  * Clients should pass their JWT in the `auth` object:
- *   `socket = io(url, { auth: { token: 'Bearer <jwt>' } })`
- *
- * This is intentionally lightweight — full JWT verification should be
- * done in a dedicated auth middleware if required.
+ *   `socket = io(url, { auth: { userId: "..." } })`
  *
  * @param socket - The connecting socket.
  * @returns        The userId string, or undefined if absent.
  */
-function extractUserId(socket: TypedSocket): string | undefined {
+function extractAuthInfo(socket: TypedSocket): { userId?: string; tokenExp?: number } {
   const auth = socket.handshake.auth as Record<string, unknown>;
+  const token = typeof auth?.token === 'string' ? auth.token : undefined;
 
-  if (typeof auth?.userId === 'string' && auth.userId.trim()) {
-    return auth.userId.trim();
+  if (!token) {
+    return {};
   }
 
-  // Fallback: check query params (useful for testing with Postman)
-  const queryUserId = socket.handshake.query?.userId;
-  if (typeof queryUserId === 'string' && queryUserId.trim()) {
-    return queryUserId.trim();
+  try {
+    const rawToken = token.startsWith('Bearer ') ? token.slice(7) : token;
+    const decoded = jwt.verify(rawToken, env.JWT_SECRET) as { userId?: string; exp?: number };
+    return {
+      userId: typeof decoded.userId === 'string' ? decoded.userId : undefined,
+      tokenExp: typeof decoded.exp === 'number' ? decoded.exp * 1000 : undefined,
+    };
+  } catch (err) {
+    logger.warn(`JWT verification failed for socket ${socket.id}: ${(err as Error).message}`);
+    return {};
+  }
+}
+
+/**
+ * Extract a JWT token from the socket handshake.
+ *
+ * Clients should pass their token in the `auth` object:
+ *   `socket = io(url, { auth: { token: 'Bearer <jwt>' } })`
+ *
+ * @param socket - The connecting socket.
+ * @returns        The raw token string, or undefined if absent.
+ */
+function _extractToken(socket: TypedSocket): string | undefined {
+  const auth = socket.handshake.auth as Record<string, unknown>;
+
+  if (typeof auth?.token === 'string' && auth.token.trim()) {
+    return auth.token.trim();
+  }
+
+  // Fallback: check query params
+  const queryToken = socket.handshake.query?.token;
+  if (typeof queryToken === 'string' && queryToken.trim()) {
+    return queryToken.trim();
   }
 
   return undefined;

@@ -1,6 +1,7 @@
 import { Request, Response, NextFunction } from 'express';
 import { StatusCodes } from 'http-status-codes';
 import { checkIndexerLag, getRecentAlerts } from '../services/monitorService';
+import { sendSuccess } from '../utils/responseWrapper';
 
 // ─── Controller ────────────────────────────────────────────────────────────────
 
@@ -20,11 +21,7 @@ export const getIndexerLagStatus = async (
 ): Promise<void> => {
   try {
     const result = await checkIndexerLag();
-
-    res.status(StatusCodes.OK).json({
-      status: 'success',
-      data: result,
-    });
+    sendSuccess(res, result, 'Indexer lag status retrieved successfully', StatusCodes.OK);
   } catch (error) {
     next(error);
   }
@@ -51,10 +48,12 @@ export const listIndexerLagAlerts = async (
 
     const alerts = await getRecentAlerts(limit);
 
-    res.status(StatusCodes.OK).json({
-      status: 'success',
-      data: { alerts, count: alerts.length },
-    });
+    sendSuccess(
+      res,
+      { alerts, count: alerts.length },
+      'Indexer lag alerts retrieved successfully',
+      StatusCodes.OK,
+    );
   } catch (error) {
     next(error);
   }

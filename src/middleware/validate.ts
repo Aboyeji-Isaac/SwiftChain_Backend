@@ -1,10 +1,11 @@
 import { Request, Response, NextFunction } from 'express';
 import { z } from 'zod';
 import { StatusCodes } from 'http-status-codes';
+import type { ApiResponse } from '../utils/responseWrapper';
 
 /**
  * Express middleware factory that validates req.body against a Zod schema.
- * Returns structured validation errors on failure.
+ * Returns a standardised ApiResponse envelope on failure.
  */
 const validate =
   (schema: z.ZodType) =>
@@ -17,12 +18,15 @@ const validate =
         message: issue.message,
       }));
 
-      res.status(StatusCodes.BAD_REQUEST).json({
-        status: 'error',
-        statusCode: StatusCodes.BAD_REQUEST,
+      const body: ApiResponse<null> & { errors: typeof errors } = {
+        success: false,
+        data: null,
+        error: 'Validation failed',
         message: 'Validation failed',
         errors,
-      });
+      };
+
+      res.status(StatusCodes.BAD_REQUEST).json(body);
       return;
     }
 

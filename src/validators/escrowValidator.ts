@@ -54,11 +54,7 @@ export const fundEscrowBodySchema = z.object({
     .max(12, 'asset code cannot exceed 12 characters')
     .toUpperCase(),
 
-  fundedBy: z
-    .string()
-    .trim()
-    .max(128, 'fundedBy cannot exceed 128 characters')
-    .optional(),
+  fundedBy: z.string().trim().max(128, 'fundedBy cannot exceed 128 characters').optional(),
 
   ledger: z
     .number({ error: 'ledger must be a non-negative integer' })

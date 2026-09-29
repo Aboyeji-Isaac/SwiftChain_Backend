@@ -3,6 +3,7 @@ import { StatusCodes } from 'http-status-codes';
 import { driverService } from '../services/driverService';
 import type { IUser } from '../interfaces/IUser';
 import AppError from '../utils/AppError';
+import { sendSuccess } from '../utils/responseWrapper';
 
 interface SetVehicleDetailsBody {
   make?: unknown;
@@ -26,10 +27,7 @@ class DriverController {
 
       const result = await driverService.getLeaderboard(page, limit);
 
-      res.status(200).json({
-        status: 'success',
-        ...result,
-      });
+      sendSuccess(res, result, 'Leaderboard retrieved successfully', StatusCodes.OK);
     } catch (err) {
       next(err);
     }
@@ -39,14 +37,6 @@ class DriverController {
    * PATCH /api/v1/drivers/me/vehicle
    *
    * Creates or updates the authenticated driver's vehicle details.
-   * Protected by `authenticate` + `requireRole(UserRole.DRIVER)`.
-   *
-   * Body:
-   *   - make         {string} Required.
-   *   - model        {string} Required.
-   *   - plateNumber  {string} Required.
-   *   - year         {number} Optional.
-   *   - capacityKg   {number} Optional.
    */
   async setVehicleDetails(
     req: Request<unknown, unknown, SetVehicleDetailsBody>,
@@ -85,11 +75,7 @@ class DriverController {
         capacityKg: capacityKg as number | undefined,
       });
 
-      res.status(StatusCodes.OK).json({
-        status: 'success',
-        message: 'Vehicle details updated successfully.',
-        data: { profile },
-      });
+      sendSuccess(res, { profile }, 'Vehicle details updated successfully.', StatusCodes.OK);
     } catch (err) {
       next(err);
     }

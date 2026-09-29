@@ -97,7 +97,7 @@ describe('Auth flow: register -> login -> authorized access', () => {
     });
 
     expect(res.status).toBe(401);
-    expect(res.body.status).toBe('error');
+    expect(res.body.success).toBe(false);
   });
 
   it('prevents registering the same email twice and still allows the original account to log in', async () => {

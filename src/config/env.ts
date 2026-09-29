@@ -37,6 +37,28 @@ interface EnvConfig {
   PROFILE_PICTURE_HEIGHT?: string;
   PROFILE_PICTURE_QUALITY?: string;
 
+  // ── Uploads / evidence storage ─────────────────────────────────────────────
+  /** Public base URL used to build links to locally stored uploads. Default: http://localhost:3000 */
+  APP_BASE_URL: string;
+  /** Maximum accepted evidence upload size, in MB. Default: 10 */
+  UPLOAD_MAX_FILE_SIZE_MB: number;
+  /** AWS region for the S3 upload driver. Default: us-east-1 */
+  AWS_REGION: string;
+  /** AWS access key id. Blank falls back to the provider credential chain. */
+  AWS_ACCESS_KEY_ID: string;
+  /** AWS secret access key. Blank falls back to the provider credential chain. */
+  AWS_SECRET_ACCESS_KEY: string;
+  /** Lifetime (s) of S3 pre-signed download URLs. Default: 900 */
+  AWS_S3_SIGNED_URL_EXPIRES_SECONDS: number;
+
+  // ── Indexer lag monitoring ─────────────────────────────────────────────────
+  /** Ledger gap at which an indexer-lag alert is raised. Default: 100 */
+  INDEXER_LAG_ALERT_THRESHOLD: number;
+  /** Interval (ms) between background indexer-lag checks. Default: 60000 */
+  INDEXER_LAG_CHECK_INTERVAL_MS: number;
+  /** Webhook notified when an indexer-lag alert fires. Blank disables the call. */
+  INDEXER_LAG_WEBHOOK_URL: string;
+
   // ── Soroban RPC retry config ────────────────────────────────────────────────
   /** Maximum attempts (including the first) for generic RPC retries. Default: 3 */
   SOROBAN_RPC_MAX_RETRIES: number;
@@ -236,6 +258,21 @@ try {
 
 if (env.UPLOAD_STORAGE_DRIVER === 's3' && !env.AWS_S3_BUCKET) {
   console.error('❌ AWS_S3_BUCKET is required when UPLOAD_STORAGE_DRIVER=s3');
+  process.exit(1);
+}
+
+if (env.DRIVER_PROXIMITY_DEFAULT_RADIUS_M > env.DRIVER_PROXIMITY_MAX_RADIUS_M) {
+  console.error('❌ DRIVER_PROXIMITY_DEFAULT_RADIUS_M cannot exceed DRIVER_PROXIMITY_MAX_RADIUS_M');
+  process.exit(1);
+}
+
+if (env.SOROBAN_RPC_RETRY_BASE_MS > env.SOROBAN_RPC_RETRY_MAX_MS) {
+  console.error('❌ SOROBAN_RPC_RETRY_BASE_MS cannot exceed SOROBAN_RPC_RETRY_MAX_MS');
+  process.exit(1);
+}
+
+if (env.WEBHOOK_RETRY_BASE_MS > env.WEBHOOK_RETRY_MAX_MS) {
+  console.error('❌ WEBHOOK_RETRY_BASE_MS cannot exceed WEBHOOK_RETRY_MAX_MS');
   process.exit(1);
 }
 

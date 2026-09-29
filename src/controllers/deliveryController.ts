@@ -1,33 +1,26 @@
 import { Request, Response } from 'express';
+import { StatusCodes } from 'http-status-codes';
 import { deliveryService } from '../services/deliveryService';
+import { sendSuccess, sendError } from '../utils/responseWrapper';
 
 class DeliveryController {
   async getDeliveryETA(req: Request, res: Response): Promise<void> {
+    const { id } = req.params;
+
+    if (!id) {
+      sendError(res, 'Delivery ID is required', StatusCodes.BAD_REQUEST);
+      return;
+    }
+
     try {
-      const { id } = req.params;
-
-      if (!id) {
-        res.status(400).json({
-          success: false,
-          error: 'Delivery ID is required',
-        });
-        return;
-      }
-
       const result = await deliveryService.calculateDeliveryETA({ deliveryId: id });
-
-      res.status(200).json({
-        success: true,
-        data: result,
-        message: 'ETA calculated successfully',
-      });
+      sendSuccess(res, result, 'ETA calculated successfully', StatusCodes.OK);
     } catch (error: unknown) {
       const errorMessage = error instanceof Error ? error.message : String(error);
-      const statusCode = errorMessage.includes('not found') ? 404 : 500;
-      res.status(statusCode).json({
-        success: false,
-        error: errorMessage || 'Failed to calculate ETA',
-      });
+      const statusCode = errorMessage.includes('not found')
+        ? StatusCodes.NOT_FOUND
+        : StatusCodes.INTERNAL_SERVER_ERROR;
+      sendError(res, errorMessage || 'Failed to calculate ETA', statusCode);
     }
   }
 }

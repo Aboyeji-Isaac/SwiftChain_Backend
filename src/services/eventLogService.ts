@@ -9,10 +9,7 @@ export class EventLogService {
     try {
       // Check if event already exists
       if (eventData.transactionHash && eventData.eventType) {
-        const exists = await EventLog.eventExists(
-          eventData.transactionHash,
-          eventData.eventType
-        );
+        const exists = await EventLog.eventExists(eventData.transactionHash, eventData.eventType);
         if (exists) {
           throw new Error('Event already exists');
         }
@@ -61,9 +58,7 @@ export class EventLogService {
    */
   async getUnprocessedEvents(): Promise<IEventLog[]> {
     try {
-      return await EventLog.find({ status: 'pending' })
-        .sort({ createdAt: 1 })
-        .limit(100);
+      return await EventLog.find({ status: 'pending' }).sort({ createdAt: 1 }).limit(100);
     } catch (error) {
       logger.error('Error fetching unprocessed events:', error);
       return [];
@@ -76,11 +71,11 @@ export class EventLogService {
   async getEventsByLedgerRange(
     startLedger: number,
     endLedger: number,
-    eventType?: string
+    eventType?: string,
   ): Promise<IEventLog[]> {
     try {
       const query: any = {
-        ledgerSequence: { $gte: startLedger, $lte: endLedger }
+        ledgerSequence: { $gte: startLedger, $lte: endLedger },
       };
       if (eventType) {
         query.eventType = eventType;
@@ -112,7 +107,7 @@ export class EventLogService {
       const event = await EventLog.findByIdAndUpdate(
         eventId,
         { status: 'failed', errorMessage },
-        { new: true }
+        { new: true },
       );
       if (event) {
         logger.warn(`Event ${eventId} marked as failed: ${errorMessage}`);

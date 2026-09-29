@@ -48,10 +48,9 @@ afterAll(async () => {
 
 // ─── Helpers ───────────────────────────────────────────────────────────────────
 
-const JWT_SECRET = 'test-secret-key';
+const JWT_SECRET = 'test-secret-key-16chars';
 
-const signToken = (userId: string): string =>
-  jwt.sign({ id: userId }, JWT_SECRET, { expiresIn: '1h' });
+const signToken = (userId: string): string => jwt.sign({ userId }, JWT_SECRET, { expiresIn: '1h' });
 
 const createUser = async (
   overrides: Partial<{
@@ -91,7 +90,7 @@ describe('POST /api/v1/fleets', () => {
         .send({ name: 'City Logistics Fleet' });
 
       expect(res.status).toBe(201);
-      expect(res.body.status).toBe('success');
+      expect(res.body.success).toBe(true);
       expect(res.body.data.fleet.name).toBe('City Logistics Fleet');
     });
 

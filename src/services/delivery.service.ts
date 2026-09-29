@@ -1,9 +1,13 @@
 import { Types } from 'mongoose';
 import httpStatus from 'http-status-codes';
 import Delivery, { IDelivery, DeliveryStatus, ILocation, IPackage } from '../models/Delivery';
-import Escrow, { EscrowLockStatus } from '../models/Escrow';
+import Escrow, { EscrowStatus } from '../models/Escrow';
 import { AppError } from '../utils/AppError';
 import logger from '../config/logger';
+import { deliveryRepository } from '../repositories/DeliveryRepository';
+import { notificationService } from './notificationService';
+import { webhookService } from './webhookService';
+import { proofOfDeliveryService } from './proofOfDeliveryService';
 
 export interface CreateDeliveryInput {
   trackingNumber: string;
@@ -52,7 +56,32 @@ export interface PaginatedResult<T> {
   totalPages: number;
 }
 
+/**
+ * Legal delivery status transitions.
+ *
+ * Encoded as a map rather than checked inline so the state machine is
+ * inspectable in one place and covered directly by tests. Terminal states map
+ * to an empty list: nothing follows a completed or cancelled delivery.
+ */
+const ALLOWED_TRANSITIONS: Record<DeliveryStatus, readonly DeliveryStatus[]> = {
+  [DeliveryStatus.PENDING]: [
+    DeliveryStatus.FUNDED,
+    DeliveryStatus.ASSIGNED,
+    DeliveryStatus.CANCELLED,
+  ],
+  [DeliveryStatus.FUNDED]: [DeliveryStatus.ASSIGNED, DeliveryStatus.CANCELLED],
+  [DeliveryStatus.ASSIGNED]: [DeliveryStatus.IN_PROGRESS, DeliveryStatus.CANCELLED],
+  [DeliveryStatus.IN_PROGRESS]: [DeliveryStatus.COMPLETED, DeliveryStatus.CANCELLED],
+  [DeliveryStatus.COMPLETED]: [],
+  [DeliveryStatus.CANCELLED]: [],
+};
+
 export class DeliveryService {
+  /**
+   * Generates a QR code for secure delivery handoff verification (merged
+   * capability from the legacy deliveryService module).
+   */
+  generateHandoffQrCode!: (deliveryId: string) => Promise<HandoffQrCodeResult>;
   async create(input: CreateDeliveryInput): Promise<IDelivery> {
     const existing = await Delivery.findOne({
       trackingNumber: input.trackingNumber,
@@ -72,7 +101,7 @@ export class DeliveryService {
       throw new AppError('Invalid delivery ID', httpStatus.BAD_REQUEST);
     }
 
-    const delivery = await Delivery.findById(id);
+    const delivery = await Delivery.findOne({ _id: id, isDeleted: { $ne: true } });
     if (!delivery) {
       throw new AppError('Delivery not found', httpStatus.NOT_FOUND);
     }
@@ -82,7 +111,10 @@ export class DeliveryService {
   async list(filters: DeliveryFilter): Promise<PaginatedResult<IDelivery>> {
     const { status, driver, search, page = 1, limit = 10 } = filters;
 
-    const query: Record<string, unknown> = {};
+    const query: Record<string, unknown> = {
+      // Soft-deleted deliveries are only exposed via GET /deliveries/archived.
+      isDeleted: { $ne: true },
+    };
 
     if (status) {
       query.status = status;
@@ -190,6 +222,76 @@ export class DeliveryService {
   }
 
   /**
+   * Advance a delivery to a new status and notify the parties involved.
+   *
+   * The transition is applied with a conditional update that asserts the
+   * current status, so two concurrent requests cannot both advance the same
+   * delivery — the loser matches no document and is rejected with a 409.
+   *
+   * Push notifications are dispatched after the write commits, and never
+   * affect the outcome: a delivery that has moved to `completed` stays
+   * completed even if the push provider is unreachable.
+   *
+   * @throws {AppError} 400 — invalid delivery id, or an illegal transition.
+   * @throws {AppError} 404 — delivery not found.
+   * @throws {AppError} 409 — the delivery changed status concurrently.
+   */
+  async updateStatus(id: string, nextStatus: DeliveryStatus): Promise<IDelivery> {
+    if (!Types.ObjectId.isValid(id)) {
+      throw new AppError('Invalid delivery ID', httpStatus.BAD_REQUEST);
+    }
+
+    const current = await deliveryRepository.findById(id);
+    if (!current) {
+      throw new AppError('Delivery not found', httpStatus.NOT_FOUND);
+    }
+
+    if (current.status === nextStatus) {
+      throw new AppError(`Delivery is already in status '${nextStatus}'.`, httpStatus.CONFLICT);
+    }
+
+    const permitted = ALLOWED_TRANSITIONS[current.status] ?? [];
+    if (!permitted.includes(nextStatus)) {
+      throw new AppError(
+        `Cannot transition a delivery from '${current.status}' to '${nextStatus}'.` +
+          (permitted.length > 0
+            ? ` Allowed next states: ${permitted.join(', ')}.`
+            : ' This is a terminal state.'),
+        httpStatus.BAD_REQUEST,
+      );
+    }
+
+    if (nextStatus === DeliveryStatus.COMPLETED) {
+      // Proof of delivery must be on record before a delivery can be marked
+      // completed — this is what ultimately unblocks its escrow release.
+      await proofOfDeliveryService.assertProofOfDeliveryExists(id);
+    }
+
+    const updated = await deliveryRepository.transitionStatus(id, current.status, nextStatus);
+
+    if (!updated) {
+      // The conditional update matched nothing, so the status changed between
+      // the read above and the write — a concurrent transition won.
+      throw new AppError(
+        'Delivery status changed concurrently. Retry with the current state.',
+        httpStatus.CONFLICT,
+      );
+    }
+
+    logger.info(
+      `[DeliveryService] Status transition — delivery=${id} ` +
+        `${current.status} -> ${nextStatus}`,
+    );
+
+    // Fire-and-forget by design: notification/webhook failures are recorded
+    // inside their own services and must not roll back a committed transition.
+    await notificationService.notifyDeliveryTransition(updated, nextStatus);
+    await webhookService.dispatchDeliveryEvent(updated, nextStatus);
+
+    return updated;
+  }
+
+  /**
    * Assign a driver to a delivery, **only if the Soroban escrow contract for
    * that delivery is fully initialised (locked)**.
    *
@@ -260,25 +362,24 @@ export class DeliveryService {
     }
 
     // ── 5. Guard: escrow must be LOCKED ─────────────────────────────────────
-    if (escrow.lockStatus !== EscrowLockStatus.LOCKED) {
-      const statusDescriptions: Record<EscrowLockStatus, string> = {
-        [EscrowLockStatus.PENDING]:
+    if (escrow.status !== EscrowStatus.LOCKED) {
+      const statusDescriptions: Record<EscrowStatus, string> = {
+        [EscrowStatus.PENDING]:
           'the escrow contract initialisation is still pending — funds have not been locked yet',
-        [EscrowLockStatus.LOCKED]: '', // handled above (success path)
-        [EscrowLockStatus.RELEASED]:
-          'the escrowed funds have already been released',
-        [EscrowLockStatus.REFUNDED]:
-          'the escrowed funds have been refunded',
-        [EscrowLockStatus.DISPUTED]:
-          'the escrow is currently under dispute',
+        [EscrowStatus.LOCKED]: '', // handled above (success path)
+        [EscrowStatus.RELEASED]: 'the escrowed funds have already been released',
+        [EscrowStatus.REFUNDED]: 'the escrowed funds have been refunded',
+        [EscrowStatus.DISPUTED]: 'the escrow is currently under dispute',
+        [EscrowStatus.EXPIRED]: 'the escrow lock has expired and is awaiting admin resolution',
+        [EscrowStatus.RESOLVED]: 'the expired escrow has already been resolved by an admin',
       };
 
       const reason =
-        statusDescriptions[escrow.lockStatus] ??
-        `the escrow is in an unexpected state '${escrow.lockStatus}'`;
+        statusDescriptions[escrow.status] ??
+        `the escrow is in an unexpected state '${escrow.status}'`;
 
       logger.warn(
-        `[DeliveryService] assignDriver blocked — escrow lockStatus=${escrow.lockStatus} ` +
+        `[DeliveryService] assignDriver blocked — escrow status=${escrow.status} ` +
           `delivery=${deliveryId}`,
       );
 
@@ -304,3 +405,79 @@ export class DeliveryService {
 }
 
 export const deliveryService = new DeliveryService();
+// ─── Handoff QR code (merged from legacy deliveryService.ts) ────────────────
+//
+// The legacy `deliveryService.ts` module provided `generateHandoffQrCode`.
+// It was merged here so the canonical `deliveryService` singleton exposes the
+// full delivery surface; the controller and DI container now share one import.
+
+import QRCode from 'qrcode';
+import { generateQrToken } from '../utils/qrToken';
+
+export interface HandoffQrCodeResult {
+  /** Base64 PNG data URL of the QR code. */
+  qrCode: string;
+  /** Signed verification token (kept out of API responses). */
+  token: string;
+  /** When the token expires. */
+  expiresAt: Date;
+  /** Delivery the QR code belongs to. */
+  deliveryId: string;
+}
+
+class DeliveryServiceQrExtensions {
+  /**
+   * Generates a QR code for secure delivery handoff verification.
+   * QR encodes delivery ID and a time-limited HMAC-signed token.
+   */
+  async generateHandoffQrCode(deliveryId: string): Promise<HandoffQrCodeResult> {
+    const delivery = await Delivery.findById(deliveryId).lean();
+
+    if (!delivery) {
+      throw new AppError('Delivery not found', httpStatus.NOT_FOUND);
+    }
+
+    const eligibleStatuses: string[] = [DeliveryStatus.IN_PROGRESS];
+    if (!eligibleStatuses.includes(String(delivery.status))) {
+      throw new AppError(
+        `Delivery is not eligible for handoff. Current status: ${delivery.status}`,
+        httpStatus.BAD_REQUEST,
+      );
+    }
+
+    const token = generateQrToken(deliveryId);
+    const expiryMinutes = parseInt(process.env.QR_TOKEN_EXPIRY_MINUTES ?? '30', 10);
+    const expiresAt = new Date(Date.now() + expiryMinutes * 60 * 1000);
+
+    const qrData = JSON.stringify({
+      deliveryId,
+      token,
+      type: 'swiftchain_handoff',
+    });
+
+    const qrCode = await QRCode.toDataURL(qrData, {
+      type: 'image/png',
+      width: 300,
+      margin: 2,
+      color: {
+        dark: '#000000',
+        light: '#FFFFFF',
+      },
+    });
+
+    return { qrCode, token, expiresAt, deliveryId };
+  }
+}
+
+/**
+ * Attach the QR/handoff capability onto the canonical `deliveryService`
+ * singleton via prototype delegation so `deliveryService.generateHandoffQrCode(id)`
+ * works without changing controller call sites.
+ */
+DeliveryService.prototype.generateHandoffQrCode = async function (
+  this: DeliveryService,
+  deliveryId: string,
+): Promise<HandoffQrCodeResult> {
+  const qr = new DeliveryServiceQrExtensions();
+  return qr.generateHandoffQrCode(deliveryId);
+};

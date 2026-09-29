@@ -30,6 +30,7 @@ export interface IDelivery extends Document {
   distance?: number;
   estimatedDuration?: number;
   actualDuration?: number;
+  proofOfDelivery?: IProofOfDelivery;
   isDeleted?: boolean;
   deletedAt?: Date | null;
   deletedBy?: string;
@@ -70,6 +71,20 @@ export interface IPackage {
   requiresSignature?: boolean;
 }
 
+/** Image evidence a driver uploads to prove a delivery was completed. */
+export interface IProofOfDelivery {
+  /** Backend-specific object key (S3 key or local relative path). */
+  storageKey: string;
+  /** URL the image can be retrieved from. */
+  imageUrl: string;
+  storageDriver: string;
+  mimeType: string;
+  sizeBytes: number;
+  /** User id (string) of the driver who uploaded the proof. */
+  uploadedBy: string;
+  uploadedAt: Date;
+}
+
 const DeliverySchema = new Schema<IDelivery>(
   {
     deliveryId: { type: String, unique: true, sparse: true },
@@ -105,6 +120,7 @@ const DeliverySchema = new Schema<IDelivery>(
     distance: { type: Number },
     estimatedDuration: { type: Number },
     actualDuration: { type: Number },
+    proofOfDelivery: { type: Schema.Types.Mixed },
     isDeleted: { type: Boolean, default: false },
     deletedAt: { type: Date, default: null },
     deletedBy: { type: String },

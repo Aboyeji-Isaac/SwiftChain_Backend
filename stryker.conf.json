@@ -1,0 +1,38 @@
+{
+  "version": "7",
+  "testRunner": "jest",
+  "jest": {
+    "projectType": "custom",
+    "configFile": "jest.config.js",
+    "enableFindRelatedTests": true
+  },
+  "mutate": [
+    "src/services/**/*.ts",
+    "!src/services/**/*.test.ts",
+    "!src/services/**/*.spec.ts"
+  ],
+  "checkers": ["typescript"],
+  "tsconfigFile": "tsconfig.json",
+  "reporters": ["html", "clear-text", "json"],
+  "reportFileName": "reports/mutation",
+  "thresholds": {
+    "high": 75,
+    "low": 50,
+    "break": 60
+  },
+  "concurrency": 4,
+  "timeoutMS": 5000,
+  "timeoutFactor": 1.5,
+  "plugins": ["@stryker-mutator/typescript-checker"],
+  "disableBail": false,
+  "ignoreStatic": false,
+  "maxTestsReused": 3,
+  "mutator": {
+    "excludedMutations": [
+      "ConditionalExpression",
+      "StringLiteral",
+      "RegexLiteral"
+    ]
+  },
+  "cleanTempDir": true
+}

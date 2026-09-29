@@ -26,9 +26,14 @@ export interface IUser extends Document {
   suspendedAt?: Date;
   profilePicture?: string;
   profilePictureKey?: string;
+  isDeleted?: boolean;
+  deletedAt?: Date | null;
+  deletedBy?: string;
   createdAt: Date;
   updatedAt: Date;
   comparePassword(candidatePassword: string): Promise<boolean>;
+  softDelete(userId?: string): Promise<this>;
+  restore(): Promise<this>;
 }
 
 export interface ILoginPayload {

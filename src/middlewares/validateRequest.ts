@@ -1,6 +1,7 @@
 import { Request, Response, NextFunction } from 'express';
 import { z, ZodType } from 'zod';
 import { StatusCodes } from 'http-status-codes';
+import type { ApiResponse } from '../utils/responseWrapper';
 
 interface RequestSchemas {
   body?: ZodType;
@@ -14,7 +15,7 @@ interface RequestSchemas {
  *
  * On success the validated (and coerced) values are written back to req so
  * downstream handlers always receive typed, sanitised data.
- * On failure a structured 400 response is returned with per-field error details.
+ * On failure a standardised ApiResponse 400 is returned with per-field error details.
  */
 export const validateRequest =
   (schemas: RequestSchemas) =>
@@ -55,12 +56,14 @@ export const validateRequest =
     }
 
     if (errors.length > 0) {
-      res.status(StatusCodes.BAD_REQUEST).json({
-        status: 'error',
-        statusCode: StatusCodes.BAD_REQUEST,
+      const body: ApiResponse<null> & { errors: typeof errors } = {
+        success: false,
+        data: null,
+        error: 'Validation failed',
         message: 'Validation failed',
         errors,
-      });
+      };
+      res.status(StatusCodes.BAD_REQUEST).json(body);
       return;
     }
 

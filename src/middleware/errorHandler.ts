@@ -3,6 +3,7 @@ import { z } from 'zod';
 import { Error as MongooseError } from 'mongoose';
 import logger from '../config/logger';
 import AppError from '../utils/AppError';
+import { sendError } from '../utils/responseWrapper';
 import env from '../config/env';
 
 const handleCastErrorDB = (err: MongooseError.CastError): AppError => {
@@ -23,27 +24,17 @@ const handleValidationErrorDB = (err: MongooseError.ValidationError): AppError =
 };
 
 const sendErrorDev = (err: AppError, _req: Request, res: Response): void => {
-  res.status(err.statusCode).json({
-    status: 'error',
-    error: err,
-    message: err.message,
-    stack: err.stack,
-  });
+  // In development we include the stack in the `error` field so it is still
+  // accessible, but the top-level envelope always matches the standard shape.
+  sendError(res, err.stack ?? err.message, err.statusCode, err.message);
 };
 
 const sendErrorProd = (err: AppError, _req: Request, res: Response): void => {
   if (err.isOperational) {
-    res.status(err.statusCode).json({
-      status: 'error',
-      message: err.message,
-    });
+    sendError(res, err.message, err.statusCode, err.message);
   } else {
     logger.error('ERROR 💥', err);
-
-    res.status(500).json({
-      status: 'error',
-      message: 'Something went very wrong!',
-    });
+    sendError(res, 'Something went very wrong!', 500, 'Something went very wrong!');
   }
 };
 
@@ -86,7 +77,7 @@ const errorHandler = (
     `${error.statusCode} - ${error.message} - ${req.originalUrl} - ${req.method} - ${req.ip}`,
   );
 
-  if (env.NODE_ENV === 'development') {
+  if (env.NODE_ENV === 'development' || env.NODE_ENV === 'test') {
     sendErrorDev(error, req, res);
   } else {
     sendErrorProd(error, req, res);

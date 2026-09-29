@@ -1,6 +1,7 @@
 import { Request, Response, NextFunction } from 'express';
 import httpStatus from 'http-status-codes';
 import { getAllCircuitBreakerStatuses } from '../utils/circuitBreaker';
+import { sendSuccess } from '../utils/responseWrapper';
 
 /**
  * CircuitBreakerController exposes the runtime state of every registered
@@ -18,41 +19,6 @@ export class CircuitBreakerController {
    *
    * Returns the state and rolling statistics for every circuit breaker that
    * has been initialised since the process started.
-   *
-   * Response shape:
-   * ```json
-   * {
-   *   "status": "success",
-   *   "data": {
-   *     "breakers": [
-   *       {
-   *         "name": "google-maps",
-   *         "state": "closed",
-   *         "stats": {
-   *           "failures": 0,
-   *           "successes": 42,
-   *           "rejects": 0,
-   *           "timeouts": 0,
-   *           "fallbacks": 0,
-   *           "fires": 42,
-   *           "percentError": 0
-   *         }
-   *       },
-   *       {
-   *         "name": "soroban-rpc",
-   *         "state": "open",
-   *         "stats": { ... }
-   *       }
-   *     ],
-   *     "summary": {
-   *       "total": 3,
-   *       "closed": 2,
-   *       "open": 1,
-   *       "halfOpen": 0
-   *     }
-   *   }
-   * }
-   * ```
    *
    * HTTP status codes:
    *   200 — all breakers closed (healthy)
@@ -72,18 +38,10 @@ export class CircuitBreakerController {
       // Use 206 Partial Content when the system is operating in a degraded
       // state so monitoring tools can distinguish healthy from degraded
       // without parsing the body.
-      const httpStatusCode =
-        summary.open > 0 || summary.halfOpen > 0
-          ? httpStatus.PARTIAL_CONTENT
-          : httpStatus.OK;
+      const statusCode =
+        summary.open > 0 || summary.halfOpen > 0 ? httpStatus.PARTIAL_CONTENT : httpStatus.OK;
 
-      res.status(httpStatusCode).json({
-        status: 'success',
-        data: {
-          breakers,
-          summary,
-        },
-      });
+      sendSuccess(res, { breakers, summary }, 'Circuit breaker status retrieved', statusCode);
     } catch (error) {
       next(error);
     }

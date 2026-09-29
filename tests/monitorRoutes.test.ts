@@ -48,10 +48,9 @@ afterAll(async () => {
   await mongoServer.stop();
 }, 15_000);
 
-const JWT_SECRET = 'test-secret-key';
+const JWT_SECRET = 'test-secret-key-16chars';
 
-const signToken = (userId: string): string =>
-  jwt.sign({ id: userId }, JWT_SECRET, { expiresIn: '1h' });
+const signToken = (userId: string): string => jwt.sign({ userId }, JWT_SECRET, { expiresIn: '1h' });
 
 const createUser = async (role: UserRole): Promise<InstanceType<typeof User>> =>
   User.create({
@@ -93,7 +92,7 @@ describe('GET /api/v1/monitor/indexer-lag', () => {
       .set('Authorization', `Bearer ${token}`);
 
     expect(res.status).toBe(200);
-    expect(res.body.status).toBe('success');
+    expect(res.body.success).toBe(true);
     expect(res.body.data).toMatchObject({
       network: 'testnet',
       processedLedger: 990,

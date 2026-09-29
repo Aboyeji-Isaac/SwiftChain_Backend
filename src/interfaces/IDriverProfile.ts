@@ -22,8 +22,13 @@ export interface IDriverProfile extends Document {
   totalDeliveries: number;
   completedDeliveries: number;
   vehicleDetails?: IVehicleDetails;
+  isDeleted?: boolean;
+  deletedAt?: Date | null;
+  deletedBy?: string;
   createdAt: Date;
   updatedAt: Date;
+  softDelete(userId?: string): Promise<this>;
+  restore(): Promise<this>;
 }
 
 export const TIER_THRESHOLDS: Record<ReputationTier, number> = {

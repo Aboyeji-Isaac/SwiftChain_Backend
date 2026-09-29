@@ -5,11 +5,15 @@
   "description": "Load and stress testing suite for the SwiftChain backend REST API and Socket.IO gateway",
   "scripts": {
     "seed": "ts-node --project tsconfig.json scripts/seedLoadTestData.ts",
+    "seed:10k": "LOAD_TEST_DRIVER_COUNT=10000 LOAD_TEST_DELIVERY_COUNT=5000 LOAD_TEST_CUSTOMER_COUNT=100 ts-node --project tsconfig.json scripts/seedLoadTestData10k.ts",
     "test:api:auth": "k6 run k6/scenarios/auth-load.js",
     "test:api:deliveries": "k6 run k6/scenarios/deliveries-load.js",
     "test:api": "npm run test:api:auth && npm run test:api:deliveries",
+    "test:socket": "k6 run k6/scenarios/socket-load.js",
+    "test:socket:10k": "SOCKET_LOAD_EMIT_INTERVAL_MS=3500 k6 run k6/scenarios/socket-load.js",
     "test:ws": "ts-node --project tsconfig.json socket-load/src/index.ts",
-    "test:all": "npm run seed && npm run test:api && npm run test:ws",
+    "test:all": "npm run seed && npm run test:api && npm run test:socket",
+    "test:all:full": "npm run seed && npm run test:api && npm run test:socket:10k",
     "lint": "eslint . --ext .ts",
     "typecheck": "tsc --project tsconfig.json --noEmit"
   },

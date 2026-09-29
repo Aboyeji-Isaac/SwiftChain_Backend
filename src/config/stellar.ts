@@ -1,6 +1,7 @@
 import { rpc as StellarRpc, Networks, StrKey } from '@stellar/stellar-sdk';
 import env, { StellarNetwork } from './env';
 import logger from './logger';
+import env from './env';
 
 /**
  * Supported Stellar network aliases.
@@ -85,7 +86,7 @@ function resolveStellarConfig(): StellarConfig {
     rpcUrl,
     networkPassphrase,
     network,
-    timeoutMs,
+    timeoutMs: env.SOROBAN_RPC_TIMEOUT_MS,
     escrowContractId,
     escrowLockFunction: env.SOROBAN_ESCROW_LOCK_FUNCTION,
     // The SDK's transaction builder expects the fee as a string.

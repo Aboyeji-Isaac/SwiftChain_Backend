@@ -1,6 +1,7 @@
 import { Request, Response, NextFunction } from 'express';
 import { StatusCodes } from 'http-status-codes';
 import { sorobanService } from '../blockchain/soroban.service';
+import { sendSuccess, sendError } from '../utils/responseWrapper';
 import logger from '../config/logger';
 
 /**
@@ -17,51 +18,22 @@ export class StellarController {
    * Performs a live connectivity check against the configured Soroban RPC
    * node and returns the result.
    *
-   * Response 200 — node reachable and healthy:
-   * ```json
-   * {
-   *   "status": "success",
-   *   "data": {
-   *     "connected": true,
-   *     "network": "testnet",
-   *     "networkPassphrase": "Test SDF Network ; September 2015",
-   *     "rpcUrl": "https://soroban-testnet.stellar.org",
-   *     "status": "healthy",
-   *     "latestLedger": 12345678,
-   *     "checkedAt": "2024-01-01T00:00:00.000Z",
-   *     "latencyMs": 142
-   *   }
-   * }
-   * ```
-   *
-   * Response 503 — node unreachable or unhealthy:
-   * ```json
-   * {
-   *   "status": "error",
-   *   "data": {
-   *     "connected": false,
-   *     "network": "testnet",
-   *     "rpcUrl": "https://soroban-testnet.stellar.org",
-   *     "checkedAt": "2024-01-01T00:00:00.000Z",
-   *     "error": "connect ECONNREFUSED ..."
-   *   }
-   * }
-   * ```
+   * Response 200 — node reachable and healthy.
+   * Response 503 — node unreachable or unhealthy.
    */
   public async checkHealth(req: Request, res: Response, next: NextFunction): Promise<void> {
     try {
       const result = await sorobanService.checkConnectivity();
 
       if (result.connected) {
-        res.status(StatusCodes.OK).json({
-          status: 'success',
-          data: result,
-        });
+        sendSuccess(res, result, 'Stellar RPC node is healthy', StatusCodes.OK);
       } else {
-        res.status(StatusCodes.SERVICE_UNAVAILABLE).json({
-          status: 'error',
-          data: result,
-        });
+        // result is ConnectivityCheckError here — `error` is always present on this branch
+        const errMsg =
+          !result.connected && 'error' in result
+            ? (result as { error: string }).error
+            : 'Stellar RPC node is unreachable';
+        sendError(res, errMsg, StatusCodes.SERVICE_UNAVAILABLE, 'Stellar RPC node is unhealthy');
       }
     } catch (err) {
       logger.error('[StellarController] Unexpected error in checkHealth:', err);
@@ -74,26 +46,11 @@ export class StellarController {
    *
    * Returns network information (passphrase, protocol version) from the
    * Soroban RPC node.
-   *
-   * Response 200:
-   * ```json
-   * {
-   *   "status": "success",
-   *   "data": {
-   *     "passphrase": "Test SDF Network ; September 2015",
-   *     "protocolVersion": 21
-   *   }
-   * }
-   * ```
    */
   public async getNetworkInfo(req: Request, res: Response, next: NextFunction): Promise<void> {
     try {
       const info = await sorobanService.getNetworkInfo();
-
-      res.status(StatusCodes.OK).json({
-        status: 'success',
-        data: info,
-      });
+      sendSuccess(res, info, 'Network info retrieved successfully', StatusCodes.OK);
     } catch (err) {
       logger.error('[StellarController] Unexpected error in getNetworkInfo:', err);
       next(err);
@@ -104,23 +61,11 @@ export class StellarController {
    * GET /api/v1/stellar/ledger/latest
    *
    * Returns the latest ledger sequence number from the Soroban RPC node.
-   *
-   * Response 200:
-   * ```json
-   * {
-   *   "status": "success",
-   *   "data": { "latestLedger": 12345678 }
-   * }
-   * ```
    */
   public async getLatestLedger(req: Request, res: Response, next: NextFunction): Promise<void> {
     try {
       const latestLedger = await sorobanService.getLatestLedger();
-
-      res.status(StatusCodes.OK).json({
-        status: 'success',
-        data: { latestLedger },
-      });
+      sendSuccess(res, { latestLedger }, 'Latest ledger retrieved successfully', StatusCodes.OK);
     } catch (err) {
       logger.error('[StellarController] Unexpected error in getLatestLedger:', err);
       next(err);

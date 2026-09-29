@@ -47,11 +47,10 @@ afterAll(async () => {
 
 // ─── Helpers ───────────────────────────────────────────────────────────────────
 
-const JWT_SECRET = 'test-secret-key';
+const JWT_SECRET = 'test-secret-key-16chars';
 
 /** Mint a signed JWT for the given user id. */
-const signToken = (userId: string): string =>
-  jwt.sign({ id: userId }, JWT_SECRET, { expiresIn: '1h' });
+const signToken = (userId: string): string => jwt.sign({ userId }, JWT_SECRET, { expiresIn: '1h' });
 
 /** Create a User document directly. */
 const createUser = async (
@@ -116,7 +115,7 @@ describe('GET /api/v1/admin/disputes', () => {
         .set('Authorization', `Bearer ${token}`);
 
       expect(res.status).toBe(200);
-      expect(res.body.status).toBe('success');
+      expect(res.body.success).toBe(true);
       expect(res.body.data).toHaveLength(2);
       expect(res.body.pagination).toEqual({
         total: 2,
@@ -145,7 +144,7 @@ describe('GET /api/v1/admin/disputes', () => {
         .set('Authorization', `Bearer ${token}`);
 
       expect(res.status).toBe(200);
-      expect(res.body.status).toBe('success');
+      expect(res.body.success).toBe(true);
       expect(res.body.data).toHaveLength(2);
       expect(res.body.data[0].status).toBe(DisputeStatus.RESOLVED);
       expect(res.body.data[1].status).toBe(DisputeStatus.RESOLVED);
@@ -165,7 +164,7 @@ describe('GET /api/v1/admin/disputes', () => {
         .set('Authorization', `Bearer ${token}`);
 
       expect(res.status).toBe(200);
-      expect(res.body.status).toBe('success');
+      expect(res.body.success).toBe(true);
       expect(res.body.data).toHaveLength(4);
       expect(res.body.pagination.total).toBe(4);
     });
@@ -183,7 +182,7 @@ describe('GET /api/v1/admin/disputes', () => {
         .set('Authorization', `Bearer ${token}`);
 
       expect(res.status).toBe(200);
-      expect(res.body.status).toBe('success');
+      expect(res.body.success).toBe(true);
       expect(res.body.data).toHaveLength(2);
       expect(res.body.pagination).toEqual({
         total: 5,

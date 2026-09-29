@@ -113,13 +113,13 @@ export class S3StorageDriver implements StorageDriver {
 function buildObjectKey(originalName: string): string {
   const ext = path.extname(originalName).toLowerCase();
   const unique = `${Date.now()}-${crypto.randomUUID()}`;
-  
+
   // If originalName already has a path (like profiles/userId/...), use it as-is
   // Otherwise, default to evidence/ prefix for backward compatibility
   if (originalName.includes('/')) {
     return originalName;
   }
-  
+
   return `evidence/${unique}${ext}`;
 }
 

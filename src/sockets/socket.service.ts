@@ -13,6 +13,7 @@ import {
   SocketData,
 } from './socket.types';
 import { messageQueueService } from './messageQueue';
+import env from '../config/env';
 
 /**
  * Interval (ms) between server-initiated ping events.
@@ -45,8 +46,9 @@ export class SocketService {
    * @param socket - The incoming socket instance.
    * @param userId - Optional authenticated user ID extracted from auth token.
    */
-  public registerConnection(socket: TypedSocket, userId?: string): void {
+  public registerConnection(socket: TypedSocket, userId?: string, tokenExp?: number): void {
     const meta: SocketConnectionMeta = {
+      tokenExp: tokenExp,
       socketId: socket.id,
       userId,
       connectedAt: Date.now(),
@@ -59,7 +61,11 @@ export class SocketService {
 
     if (userId) {
       const flushed = messageQueueService.flush(userId, (event, payload, ackCallback) => {
-        socket.emit(event, payload, ackCallback);
+        (socket.emit as (event: string, payload: unknown, ack?: unknown) => void)(
+          event,
+          payload,
+          ackCallback,
+        );
       });
 
       if (flushed > 0) {
@@ -230,10 +236,20 @@ export class SocketService {
         staleConnectionsEvicted += 1;
       } else {
         // Send ping and wait for pong response
+        // Send ping and wait for pong response
         const pingPayload: PingPayload = { timestamp: Date.now() };
         const socket = io.sockets.sockets.get(socketId);
         if (socket) {
-          socket.emit('ping', pingPayload);
+          // Check JWT expiration before sending ping
+          const exp = (socket.data as any).tokenExp as number | undefined;
+          if (exp && exp < Date.now()) {
+            // Token has expired – notify client and disconnect
+            logger.warn(`[Socket] JWT expired for socket id=${socketId}`);
+            socket.emit('auth_expired');
+            socket.disconnect(true);
+          } else {
+            socket.emit('ping', pingPayload);
+          }
         }
       }
     }
@@ -274,6 +290,72 @@ export class SocketService {
    */
   public getConnections(): ReadonlyMap<string, SocketConnectionMeta> {
     return this.connections;
+  }
+
+  /**
+   * Update the stored JWT expiration for an active connection after the
+   * client refreshed its token.
+   *
+   * @param socketId - Target socket id.
+   * @param tokenExp - New expiration timestamp (ms since epoch).
+   * @returns         True when the connection is still tracked and updated.
+   */
+  public updateTokenExpiration(socketId: string, tokenExp: number): boolean {
+    const meta = this.connections.get(socketId);
+    if (!meta) {
+      return false;
+    }
+    meta.tokenExp = tokenExp;
+    return true;
+  }
+
+  /**
+   * Validate the JWT token stored on a socket's data against the database.
+   *
+   * Returns true if:
+   *   - The socket has no token/userId (unauthenticated, skip validation).
+   *   - The token is cryptographically valid, not expired, and references
+   *     an existing user whose account is active (not suspended/banned).
+   *
+   * Returns false if the token is missing, malformed, expired, or references
+   * an inactive/non-existent user.
+   *
+   * @param socket - The socket whose token should be validated.
+   * @returns       True if the token is valid (or absent), false otherwise.
+   */
+  public async validateSocketToken(socket: TypedSocket): Promise<boolean> {
+    const token = socket.data.token;
+    const userId = socket.data.userId;
+
+    if (!token || !userId) {
+      return true;
+    }
+
+    try {
+      const decoded = authService.verifyToken(token);
+      const user = await authService.getUserById(decoded.userId);
+
+      if (!user) {
+        logger.warn(`[Socket] Token validation failed — user not found for userId=${userId}`);
+        return false;
+      }
+
+      if (user.status === 'suspended' || user.status === 'banned') {
+        logger.warn(
+          `[Socket] Token validation failed — account ${user.status} for userId=${userId}`,
+        );
+        return false;
+      }
+
+      return true;
+    } catch (error) {
+      logger.warn(
+        `[Socket] Token validation failed for userId=${userId}: ${
+          error instanceof Error ? error.message : error
+        }`,
+      );
+      return false;
+    }
   }
 }
 

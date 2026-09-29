@@ -108,28 +108,38 @@ The backend serves as the central hub connecting the frontend, database, and blo
 
 ## 📡 API Endpoints
 
+All endpoints are versioned under the `/api` prefix (e.g. `/api/v1/...`). The list below
+mirrors what is mounted in `src/routes/index.ts`.
+
 ### Authentication
 
-- `POST /auth/register` - Register a new user/driver.
-- `POST /auth/login` - Authenticate and retrieve token.
+- `POST /api/v1/auth/register` - Register a new user/driver.
+- `POST /api/v1/auth/login` - Authenticate and retrieve token.
 
 ### Deliveries
 
-- `POST /deliveries` - Create a new delivery request.
-- `GET /deliveries` - Retrieve a list of deliveries (with filters).
-- `PUT /deliveries/:id/assign` - Assign a driver to a delivery.
-
-### Shipments
-
-- `POST /shipments` - Create a shipment record.
-- `GET /shipments` - Get shipment details.
+- `POST /api/v1/deliveries` - Create a new delivery request.
+- `GET /api/v1/deliveries` - Retrieve a list of deliveries (with filters).
+- `GET|PATCH /api/v1/deliveries/:id` - Retrieve or update a delivery.
+- `PATCH /api/v1/deliveries/:id/assign-driver` - Assign a driver (admin only; requires a
+  fully initialised escrow).
+- `PATCH /api/v1/deliveries/:id/archive` / `.../restore` - Soft-delete / restore.
+- `GET /api/v1/deliveries/:id/qrcode` - Handoff verification QR code.
+- `GET /api/v1/deliveries/:id/eta` - Estimated arrival time.
+- `PUT /api/v1/deliveries/:id/status` - Advance the delivery status (driver/admin).
 
 ### Escrow
 
 - `GET /api/v1/escrow/delivery/:id` - Fetch the escrow record (locking state, amount, asset,
   contract id, on-chain transaction hashes) associated with a delivery. `:id` accepts either the
   delivery `_id` or its business `deliveryId`.
-  
+- `GET /api/v1/escrow/contract/:contractId` - Fetch the escrow record by Soroban contract id.
+- `POST /api/v1/escrow/fund` - Record an on-chain `escrow_funded` event (idempotent).
+- `POST /api/v1/escrow/sync` - Manually trigger an `escrow_funded` indexer poll.
+- `POST /api/v1/escrow/release` - Release an escrow (Redlock-protected).
+- `GET /api/v1/admin/escrows/flagged` - List escrows flagged as expired (admin only).
+- `PATCH /api/v1/admin/escrows/:id/resolve` - Resolve a flagged escrow (admin only).
+
 ### Transactions
 
 - `POST /api/v1/transactions/escrow-lock` - Build the unsigned, simulation-prepared Soroban XDR
@@ -137,10 +147,67 @@ The backend serves as the central hub connecting the frontend, database, and blo
   contract target are resolved server-side from MongoDB and the deployment configuration. The
   returned base64 envelope is signed and submitted by the client wallet — the backend never holds
   secret keys.
+- `POST /api/v1/transactions/submit` - Submit a signed escrow-lock XDR with automatic
+  `tx_bad_seq` retry.
+
+### Monitoring
+
+- `GET /api/v1/monitor/indexer-lag` - On-demand indexer-lag check against the live ledger
+  (admin only).
+- `GET /api/v1/monitor/indexer-lag/alerts` - Recent persisted indexer-lag alerts (admin only).
+- `GET /api/v1/health` - Liveness/readiness probe with Soroban RPC health check.
+
+### Indexer
+
+- `GET /api/v1/indexer/escrows/:escrowId` - Escrow status from the database.
+- `POST /api/v1/indexer/escrows/sync/released` - Manually sync `escrow_released` events.
+- `POST /api/v1/indexer/escrows/sync/refunded` - Manually sync `escrow_refunded` events.
+- `POST /api/v1/indexer/delivery-created` - Process a `delivery_created` event (indexer worker).
 
 ### Uploads
 
-- `POST /uploads` - Upload proof of delivery or documents.
+- `POST /api/v1/uploads/evidence` - Upload dispute evidence media (authenticated).
+- `GET /api/v1/uploads/evidence/:disputeId` - List evidence for a dispute (authenticated).
+
+---
+
+## 📄 Pagination, Sorting & Filtering
+
+Collection endpoints can share a standardized query interface via the
+`buildQueryOptions` middleware in `src/middlewares/queryMiddleware.ts`, which
+parses and validates the query string once and hands the service layer a
+ready-to-use Mongoose filter, sort and page window.
+
+| Parameter | Description | Example |
+| --------- | ----------- | ------- |
+| `page` | 1-based page number | `?page=2` |
+| `limit` | Items per page, clamped to the route maximum | `?limit=50` |
+| `sort` | Comma-separated fields, `-` prefix for descending | `?sort=-createdAt,name` |
+| `search` | Case-insensitive search across searchable fields | `?search=lagos` |
+
+Filters accept direct equality or the comparison operators `eq`, `ne`, `gt`,
+`gte`, `lt`, `lte`, `in` and `nin` in bracket notation:
+
+```bash
+GET /api/v1/deliveries?status=pending&amount[gte]=100&sort=-amount&page=1&limit=20
+```
+
+Each route declares the fields it exposes, so only whitelisted fields can be
+filtered or sorted on. `buildPaginationMeta` produces the accompanying
+metadata:
+
+```json
+{
+  "totalItems": 137,
+  "totalPages": 7,
+  "currentPage": 1,
+  "limit": 20,
+  "hasNextPage": true,
+  "hasPreviousPage": false,
+  "nextPage": 2,
+  "previousPage": null
+}
+```
 
 ---
 

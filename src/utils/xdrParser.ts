@@ -34,13 +34,13 @@ export function parseXdrEvent(xdrPayload: string): ParsedEvent | null {
     }
 
     const decoded = decodeXdrPayload(xdrPayload);
-    
+
     if (isDeliveryEvent(decoded)) {
       return parseDeliveryEvent(decoded);
     } else if (isEscrowEvent(decoded)) {
       return parseEscrowEvent(decoded);
     }
-    
+
     return null;
   } catch (error) {
     logger.error('Failed to parse XDR payload:', error);
@@ -74,7 +74,7 @@ function parseDeliveryEvent(decoded: any): ParsedDelivery {
     recipient: decoded.recipient || '',
     amount: decoded.amount || '0',
     asset: decoded.asset || 'XLM',
-    timestamp: decoded.timestamp || Date.now()
+    timestamp: decoded.timestamp || Date.now(),
   };
 }
 
@@ -87,7 +87,7 @@ function parseEscrowEvent(decoded: any): ParsedEscrow {
     amount: decoded.amount || '0',
     asset: decoded.asset || 'XLM',
     releaseCondition: decoded.releaseCondition || '',
-    timestamp: decoded.timestamp || Date.now()
+    timestamp: decoded.timestamp || Date.now(),
   };
 }
 
@@ -106,19 +106,19 @@ export function isValidXdr(xdrPayload: string): boolean {
     if (!xdrPayload || xdrPayload.trim() === '') {
       return false;
     }
-    
+
     // Remove whitespace and check if string is empty
     const trimmed = xdrPayload.trim();
     if (trimmed === '') {
       return false;
     }
-    
+
     // 🔥 Check that the string only contains valid base64 characters (no spaces)
     const base64Regex = /^[A-Za-z0-9+/=]+$/;
     if (!base64Regex.test(trimmed)) {
       return false;
     }
-    
+
     // 🔥 Check that the string length is a multiple of 4 (base64 requirement)
     if (trimmed.length % 4 !== 0) {
       // Some base64 strings can be without padding, but we'll be strict
@@ -127,13 +127,13 @@ export function isValidXdr(xdrPayload: string): boolean {
         return false;
       }
     }
-    
+
     // Check if it's valid base64
     const buffer = Buffer.from(trimmed, 'base64');
     if (buffer.length === 0) {
       return false;
     }
-    
+
     return true;
   } catch {
     return false;

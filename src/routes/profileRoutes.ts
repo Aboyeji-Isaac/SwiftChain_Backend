@@ -31,9 +31,7 @@ const upload = multer({
       cb(null, true);
     } else {
       cb(
-        new Error(
-          `Invalid file type. Allowed types: ${allowedMimeTypes.join(', ')}`,
-        ) as any,
+        new Error(`Invalid file type. Allowed types: ${allowedMimeTypes.join(', ')}`) as any,
         false,
       );
     }

@@ -89,7 +89,10 @@ const crudPayload = {
 
 describe('Delivery CRUD flow: create -> read -> update -> archive -> restore', () => {
   it('carries a single delivery through its full lifecycle with real persistence at each step', async () => {
-    const createRes = await request(app).post('/api/v1/deliveries').send(crudPayload);
+    const createRes = await request(app)
+      .post('/api/v1/deliveries')
+      .set('Idempotency-Key', `test-${Date.now()}-${Math.random()}`)
+      .send(crudPayload);
     expect(createRes.status).toBe(201);
     const id = createRes.body.data.id ?? createRes.body.data._id;
     expect(createRes.body.data.status).toBe('pending');
@@ -130,8 +133,14 @@ describe('Delivery CRUD flow: create -> read -> update -> archive -> restore', (
   });
 
   it('rejects creating a delivery with a tracking number already in the database', async () => {
-    await request(app).post('/api/v1/deliveries').send(crudPayload);
-    const dupe = await request(app).post('/api/v1/deliveries').send(crudPayload);
+    await request(app)
+      .post('/api/v1/deliveries')
+      .set('Idempotency-Key', `test-${Date.now()}-${Math.random()}`)
+      .send(crudPayload);
+    const dupe = await request(app)
+      .post('/api/v1/deliveries')
+      .set('Idempotency-Key', `test-${Date.now()}-${Math.random()}`)
+      .send(crudPayload);
 
     expect(dupe.status).toBe(409);
     expect(dupe.body.status).toBe('error');

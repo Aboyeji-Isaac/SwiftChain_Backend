@@ -1,7 +1,9 @@
 import { Request, Response, NextFunction } from 'express';
+import { StatusCodes } from 'http-status-codes';
 import crypto from 'crypto';
 import mongoose from 'mongoose';
 import Delivery, { DeliveryStatus } from '../models/Delivery';
+import { sendSuccess, sendError } from '../utils/responseWrapper';
 
 // POST /api/v1/deliveries
 export const createDelivery = async (
@@ -13,21 +15,23 @@ export const createDelivery = async (
     const { sender, recipient, packageDescription, weight, estimatedValue, notes } = req.body;
 
     if (!sender?.name || !sender?.contact || !sender?.address) {
-      res.status(400).json({
-        status: 'error',
-        message: 'sender.name, sender.contact, and sender.address are required',
-      });
+      sendError(
+        res,
+        'sender.name, sender.contact, and sender.address are required',
+        StatusCodes.BAD_REQUEST,
+      );
       return;
     }
     if (!recipient?.name || !recipient?.contact || !recipient?.address) {
-      res.status(400).json({
-        status: 'error',
-        message: 'recipient.name, recipient.contact, and recipient.address are required',
-      });
+      sendError(
+        res,
+        'recipient.name, recipient.contact, and recipient.address are required',
+        StatusCodes.BAD_REQUEST,
+      );
       return;
     }
     if (!packageDescription) {
-      res.status(400).json({ status: 'error', message: 'packageDescription is required' });
+      sendError(res, 'packageDescription is required', StatusCodes.BAD_REQUEST);
       return;
     }
 
@@ -43,7 +47,7 @@ export const createDelivery = async (
       notes,
     });
 
-    res.status(201).json({ status: 'success', data: delivery });
+    sendSuccess(res, delivery, 'Delivery created successfully', StatusCodes.CREATED);
   } catch (err) {
     next(err);
   }
@@ -70,16 +74,20 @@ export const getDeliveries = async (
       Delivery.countDocuments(filter),
     ]);
 
-    res.status(200).json({
-      status: 'success',
-      data: deliveries,
-      pagination: {
-        total,
-        page,
-        limit,
-        totalPages: Math.ceil(total / limit),
+    sendSuccess(
+      res,
+      {
+        deliveries,
+        pagination: {
+          total,
+          page,
+          limit,
+          totalPages: Math.ceil(total / limit),
+        },
       },
-    });
+      'Deliveries retrieved successfully',
+      StatusCodes.OK,
+    );
   } catch (err) {
     next(err);
   }
@@ -95,18 +103,18 @@ export const getDeliveryById = async (
     const { id } = req.params;
 
     if (!mongoose.Types.ObjectId.isValid(id)) {
-      res.status(400).json({ status: 'error', message: 'Invalid delivery ID' });
+      sendError(res, 'Invalid delivery ID', StatusCodes.BAD_REQUEST);
       return;
     }
 
     const delivery = await Delivery.findById(id).lean();
 
     if (!delivery) {
-      res.status(404).json({ status: 'error', message: 'Delivery not found' });
+      sendError(res, 'Delivery not found', StatusCodes.NOT_FOUND);
       return;
     }
 
-    res.status(200).json({ status: 'success', data: delivery });
+    sendSuccess(res, delivery, 'Delivery retrieved successfully', StatusCodes.OK);
   } catch (err) {
     next(err);
   }
@@ -123,27 +131,28 @@ export const assignDriver = async (
     const { driverId } = req.body;
 
     if (!mongoose.Types.ObjectId.isValid(id)) {
-      res.status(400).json({ status: 'error', message: 'Invalid delivery ID' });
+      sendError(res, 'Invalid delivery ID', StatusCodes.BAD_REQUEST);
       return;
     }
 
     if (!driverId || typeof driverId !== 'string' || !driverId.trim()) {
-      res.status(400).json({ status: 'error', message: 'driverId is required' });
+      sendError(res, 'driverId is required', StatusCodes.BAD_REQUEST);
       return;
     }
 
     const delivery = await Delivery.findById(id);
 
     if (!delivery) {
-      res.status(404).json({ status: 'error', message: 'Delivery not found' });
+      sendError(res, 'Delivery not found', StatusCodes.NOT_FOUND);
       return;
     }
 
     if (delivery.status !== DeliveryStatus.PENDING) {
-      res.status(409).json({
-        status: 'error',
-        message: `Cannot assign driver to a delivery with status '${delivery.status}'`,
-      });
+      sendError(
+        res,
+        `Cannot assign driver to a delivery with status '${delivery.status}'`,
+        StatusCodes.CONFLICT,
+      );
       return;
     }
 
@@ -151,7 +160,7 @@ export const assignDriver = async (
     delivery.status = DeliveryStatus.ASSIGNED;
     await delivery.save();
 
-    res.status(200).json({ status: 'success', data: delivery });
+    sendSuccess(res, delivery, 'Driver assigned successfully', StatusCodes.OK);
   } catch (err) {
     next(err);
   }

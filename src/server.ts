@@ -9,8 +9,11 @@ import {
   TypedServer,
 } from './sockets/connectionHandler';
 import { startEscrowMonitorJob, stopEscrowMonitorJob } from './jobs/escrowMonitor';
+import { startWebhookRetryJob, stopWebhookRetryJob } from './jobs/webhookRetryJob';
+import { startAutoAssignmentJob, stopAutoAssignmentJob } from './jobs/autoAssignmentJob';
 import { startEventPoller, stopEventPoller } from './services/eventPoller';
 import { initializeRedis, disconnectRedis } from './config/redis';
+import env from './config/env';
 
 const PORT = env.PORT;
 
@@ -38,15 +41,15 @@ httpServer.listen(PORT, () => {
   logger.info(`📦 ETA endpoint: http://localhost:${PORT}/api/v1/deliveries/:id/eta`);
 
   // Initialize Redis and other services
-  initializeServices().catch((error) =>
-    logger.error('Error initializing services:', error)
-  );
+  initializeServices().catch((error) => logger.error('Error initializing services:', error));
 
   startIndexerLagMonitor();
 });
 
 if (env.NODE_ENV !== 'test') {
   startEscrowMonitorJob();
+  startWebhookRetryJob();
+  startAutoAssignmentJob();
   startEventPoller();
 }
 
@@ -54,15 +57,14 @@ const gracefulShutdown = (): void => {
   logger.info('Shutting down gracefully...');
   stopEventPoller();
   stopEscrowMonitorJob();
-  
+  stopWebhookRetryJob();
+  stopAutoAssignmentJob();
+
   // Disconnect Redis
-  disconnectRedis()
-    .catch((error) => logger.error('Error disconnecting Redis:', error));
+  disconnectRedis().catch((error) => logger.error('Error disconnecting Redis:', error));
 
   shutdownSocketServer(io)
-    .catch((error) =>
-      logger.error('Error shutting down Socket.IO server:', error)
-    )
+    .catch((error) => logger.error('Error shutting down Socket.IO server:', error))
     .finally(() => process.exit(0));
 };
 
