@@ -1,5 +1,5 @@
 import { Server as SocketIOServer } from 'socket.io';
-import authService from '../services/authService';
+import env from '../config/env';
 import logger from '../config/logger';
 import {
   SocketConnectionMeta,

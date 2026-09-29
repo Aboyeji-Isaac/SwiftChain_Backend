@@ -1,5 +1,6 @@
 import { Server as SocketIOServer } from 'socket.io';
 import { Server as HttpServer } from 'http';
+import env from '../config/env';
 import logger from '../config/logger';
 import { socketService } from './socket.service';
 import { registerSyncHandler } from './syncHandler';

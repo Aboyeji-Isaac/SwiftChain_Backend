@@ -1,4 +1,13 @@
 import { z } from 'zod';
+import { assetSchema, validateAsset } from '../services/currencyService';
+
+const supportedAssetSchema = assetSchema.superRefine((asset, ctx) => {
+  try {
+    validateAsset(asset);
+  } catch {
+    ctx.addIssue({ code: 'custom', message: 'Unsupported asset or issuer' });
+  }
+});
 
 // Location payloads consumed by DeliveryService.create (see
 // src/services/delivery.service.ts CreateDeliveryInput).
@@ -39,7 +48,9 @@ export const createDeliverySchema = z.object({
   dropoff: locationSchema,
   package: packageSchema,
   deliveryFee: z.number().nonnegative().optional(),
+  deliveryFeeAsset: supportedAssetSchema.optional(),
   escrowAmount: z.number().nonnegative().optional(),
+  escrowAsset: supportedAssetSchema.optional(),
   notes: z.string().optional(),
 });
 

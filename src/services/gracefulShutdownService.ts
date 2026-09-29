@@ -1,4 +1,5 @@
 import http from 'http';
+import env from '../config/env';
 import logger from '../config/logger';
 import { disconnectDatabase, waitForActiveTransactions } from '../config/database';
 import { beginRequestDrain, getInFlightRequestCount } from '../middleware/requestTracker';
@@ -7,9 +8,6 @@ import { stopEscrowMonitorService } from './escrowMonitorService';
 import { stopEventPoller } from './eventPoller';
 import { shutdownSocketServer, TypedServer } from '../sockets/connectionHandler';
 import env from '../config/env';
-
-/** Default max time (ms) to wait before forcing process exit. */
-const _DEFAULT_SHUTDOWN_TIMEOUT_MS = 30_000;
 
 /** Polling interval while waiting for in-flight HTTP / DB work to finish. */
 const DRAIN_POLL_MS = 100;

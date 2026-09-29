@@ -32,7 +32,7 @@ class RoutingService {
   private readonly baseUrl: string;
 
   constructor() {
-    this.apiKey = env.GOOGLE_MAPS_API_KEY;
+    this.apiKey = env.GOOGLE_MAPS_API_KEY ?? '';
     this.baseUrl = 'https://maps.googleapis.com/maps/api/directions/json';
 
     if (!this.apiKey) {

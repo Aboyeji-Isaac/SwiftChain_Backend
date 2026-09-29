@@ -1,4 +1,5 @@
 import { Types } from 'mongoose';
+import env from '../config/env';
 import logger from '../config/logger';
 import { LocationUpdate, ILocationUpdate } from '../models/LocationUpdate';
 import { toUTC, nowUTC } from '../utils/dateUtils';
