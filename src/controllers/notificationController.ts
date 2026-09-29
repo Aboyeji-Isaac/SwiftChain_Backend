@@ -94,7 +94,7 @@ export const getPreferences = async (
 /**
  * Update the authenticated user's notification preferences.
  *
- * Both fields are optional; `validateRequest` rejects an empty body.
+ * Both fields are optional; `validate` rejects an empty body.
  */
 export const updatePreferences = async (
   req: Request,
