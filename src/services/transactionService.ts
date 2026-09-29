@@ -1,3 +1,4 @@
+import { assertLockContractAsset } from './currencyService';
 import {
   Account,
   Address,
@@ -17,7 +18,6 @@ import AppError from '../utils/AppError';
 import logger from '../config/logger';
 import env from '../config/env';
 import { createCircuitBreaker, fireWithBreaker } from '../utils/circuitBreaker';
-import { DegradedLedgerResult } from '../blockchain/soroban.service';
 
 /** Input accepted by {@link TransactionService.buildEscrowLockXdr}. */
 export interface EscrowLockXdrInput {
@@ -43,6 +43,7 @@ export interface EscrowLockXdrResult {
     status: DeliveryStatus;
   };
   amount: {
+    assetCode: string;
     value: number;
     stroops: string;
     formatted: string;
@@ -86,23 +87,14 @@ export class TransactionService {
     // separate instance (not the shared soroban-rpc one from SorobanService)
     // so that heavy escrow-lock simulation failures don't affect the
     // lighter connectivity/health checks, and vice-versa.
-    this.breaker = createCircuitBreaker<[() => Promise<unknown>], unknown>(
-      {
-        name: 'soroban-rpc-tx',
-        errorThresholdPercentage: env.CB_SOROBAN_ERROR_THRESHOLD_PERCENTAGE,
-        rollingWindowMs: env.CB_SOROBAN_ROLLING_WINDOW_MS,
-        resetTimeoutMs: env.CB_SOROBAN_RESET_TIMEOUT_MS,
-        volumeThreshold: env.CB_SOROBAN_VOLUME_THRESHOLD,
-        timeoutMs: env.CB_SOROBAN_TIMEOUT_MS,
-      },
-      // Fallback: surface a 503 immediately rather than hanging.
-      (): DegradedLedgerResult => ({
-        degraded: true,
-        reason:
-          'Soroban RPC circuit is OPEN — unable to reach the node for ' +
-          'transaction simulation. Please retry in a moment.',
-      }),
-    );
+    this.breaker = createCircuitBreaker<[() => Promise<unknown>], unknown>({
+      name: 'soroban-rpc-tx',
+      errorThresholdPercentage: env.CB_SOROBAN_ERROR_THRESHOLD_PERCENTAGE,
+      rollingWindowMs: env.CB_SOROBAN_ROLLING_WINDOW_MS,
+      resetTimeoutMs: env.CB_SOROBAN_RESET_TIMEOUT_MS,
+      volumeThreshold: env.CB_SOROBAN_VOLUME_THRESHOLD,
+      timeoutMs: env.CB_SOROBAN_TIMEOUT_MS,
+    });
   }
 
   // ── Public API ─────────────────────────────────────────────────────────────
@@ -122,6 +114,7 @@ export class TransactionService {
     const delivery = await deliveryService.getById(input.deliveryId);
 
     this.assertLockable(delivery);
+    assertLockContractAsset(delivery.escrowAsset ?? { code: 'XLM' });
     const amount = this.resolveEscrowAmount(delivery);
     const stroops = this.toContractAmount(amount);
 
@@ -167,6 +160,7 @@ export class TransactionService {
         status: delivery.status,
       },
       amount: {
+        assetCode: delivery.escrowAsset?.code ?? 'XLM',
         value: amount,
         stroops: stroops.toString(),
         formatted: fromStroops(stroops),
@@ -227,20 +221,39 @@ export class TransactionService {
    * Load the payer account via the circuit-breaker-protected RPC client.
    */
   private async loadAccount(payerAddress: string): Promise<Account> {
-    const result = await fireWithBreaker(
-      this.breaker as CircuitBreaker<[() => Promise<Account>], Account | DegradedLedgerResult>,
+    return fireWithBreaker(
+      this.breaker as CircuitBreaker<[() => Promise<Account>], Account>,
       (action: () => Promise<Account>) => action(),
       () => this.client.getAccount(payerAddress),
-    );
+    ).catch((error: unknown) => {
+      if (this.isCircuitOpen(error)) {
+        throw new AppError(
+          'Soroban RPC is temporarily unavailable.',
+          StatusCodes.SERVICE_UNAVAILABLE,
+        );
+      }
+      const rpcError = error as { code?: number; status?: number };
+      const message = extractMessage(error);
+      if (
+        rpcError.code === 404 ||
+        rpcError.status === 404 ||
+        message.toLowerCase().includes('not found')
+      ) {
+        throw new AppError(
+          `Account ${payerAddress} does not exist on ${stellarConfig.network}.`,
+          StatusCodes.NOT_FOUND,
+        );
+      }
+      logger.error(`[TransactionService] Failed to load payer account: ${message}`);
+      throw new AppError(
+        'Unable to load the payer account from Soroban RPC.',
+        StatusCodes.BAD_GATEWAY,
+      );
+    });
+  }
 
-    // Circuit is OPEN — fallback was returned.
-    if ((result as DegradedLedgerResult).degraded) {
-      const reason = (result as DegradedLedgerResult).reason;
-      logger.error(`[TransactionService] loadAccount circuit open: ${reason}`);
-      throw new AppError(reason, StatusCodes.SERVICE_UNAVAILABLE);
-    }
-
-    return result as Account;
+  private isCircuitOpen(error: unknown): boolean {
+    return typeof error === 'object' && error !== null && 'code' in error && error.code === 'EOPEN';
   }
 
   /**
@@ -249,14 +262,16 @@ export class TransactionService {
    */
   private async prepare(transaction: Transaction): Promise<Transaction> {
     const result = await fireWithBreaker(
-      this.breaker as CircuitBreaker<
-        [() => Promise<Transaction>],
-        Transaction | DegradedLedgerResult
-      >,
+      this.breaker as CircuitBreaker<[() => Promise<Transaction>], Transaction>,
       (action: () => Promise<Transaction>) => action(),
       () => this.client.prepareTransaction(transaction),
     ).catch((error: unknown) => {
-      // Re-catch errors that escape the fallback (should not occur).
+      if (this.isCircuitOpen(error)) {
+        throw new AppError(
+          'Soroban RPC is temporarily unavailable.',
+          StatusCodes.SERVICE_UNAVAILABLE,
+        );
+      }
       const message = extractMessage(error);
       logger.error(`[TransactionService] Escrow-lock simulation failed: ${message}`);
       throw new AppError(
@@ -265,14 +280,7 @@ export class TransactionService {
       );
     });
 
-    // Circuit is OPEN — fallback was returned.
-    if ((result as DegradedLedgerResult).degraded) {
-      const reason = (result as DegradedLedgerResult).reason;
-      logger.error(`[TransactionService] prepare circuit open: ${reason}`);
-      throw new AppError(reason, StatusCodes.SERVICE_UNAVAILABLE);
-    }
-
-    return result as Transaction;
+    return result;
   }
 }
 

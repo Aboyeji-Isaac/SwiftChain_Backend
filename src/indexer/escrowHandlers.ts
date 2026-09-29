@@ -18,6 +18,7 @@ export interface EscrowFundedEventData {
   deliveryId: string;
   amount: number;
   asset: string;
+  assetIssuer?: string;
   fundedBy?: string;
 }
 
@@ -68,6 +69,7 @@ export function parseEscrowFundedEvent(
 
     const asset = data?.asset;
     const fundedBy = data?.funded_by;
+    const assetIssuer = data?.asset_issuer;
 
     if (!Number.isFinite(amount) || typeof asset !== 'string') {
       return null;
@@ -77,6 +79,7 @@ export function parseEscrowFundedEvent(
       deliveryId,
       amount,
       asset,
+      assetIssuer: typeof assetIssuer === 'string' ? assetIssuer : undefined,
       fundedBy: typeof fundedBy === 'string' ? fundedBy : undefined,
     };
   } catch (err) {
@@ -108,6 +111,7 @@ export async function handleEscrowFundedEvent(
     deliveryId: parsed.deliveryId,
     amount: parsed.amount,
     asset: parsed.asset,
+    assetIssuer: parsed.assetIssuer,
     fundedBy: parsed.fundedBy,
     transactionHash: event.txHash,
     ledger: event.ledger,
