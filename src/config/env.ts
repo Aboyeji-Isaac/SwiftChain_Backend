@@ -69,12 +69,83 @@ interface EnvConfig {
   /** Maximum attempts to retry a transaction that fails with tx_bad_seq. Default: 3 */
   STELLAR_BAD_SEQ_MAX_RETRIES: number;
 
-  // ── Soroban / Stellar connection ────────────────────────────────────────────
-  STELLAR_NETWORK: StellarNetwork;
-  /** Optional — falls back to the per-network default in `config/stellar.ts`. */
-  SOROBAN_RPC_URL?: string;
-  /** Optional — falls back to the SDK passphrase for `STELLAR_NETWORK`. */
-  STELLAR_NETWORK_PASSPHRASE?: string;
+  // ── Push notifications (Firebase Cloud Messaging) ───────────────────────────
+  /**
+   * Firebase project id. Push sending is disabled when this (or either
+   * credential below) is blank, so local development runs without Firebase.
+   */
+  FCM_PROJECT_ID: string;
+  /** Service-account client email used to mint OAuth2 access tokens. */
+  FCM_CLIENT_EMAIL: string;
+  /** Service-account private key (PEM; literal `\n` sequences are normalised). */
+  FCM_PRIVATE_KEY: string;
+  /** Timeout (ms) for FCM and Google token endpoint requests. Default: 10000 */
+  FCM_REQUEST_TIMEOUT_MS: number;
+
+  // ── Bulk delivery CSV import ────────────────────────────────────────────────
+  /** Maximum accepted upload size (bytes) for the bulk CSV endpoint. Default: 5MB */
+  BULK_UPLOAD_MAX_BYTES: number;
+  /** Maximum data rows accepted in a single bulk upload. Default: 1000 */
+  BULK_UPLOAD_MAX_ROWS: number;
+
+  // ── Socket.IO transport tuning ────────────────────────────────────
+  /** Interval (ms) between server-initiated Socket.IO pings. Default: 25000 */
+  SOCKET_PING_INTERVAL_MS: number;
+  /** Time (ms) to wait for a pong before considering the peer gone. Default: 20000 */
+  SOCKET_PING_TIMEOUT_MS: number;
+  /** Consecutive missed pongs tolerated before disconnecting. Default: 2 */
+  SOCKET_MAX_MISSED_PONGS: number;
+  /** Time (ms) a queued socket message waits for an ack before retry. Default: 15000 */
+  SOCKET_MESSAGE_ACK_TIMEOUT_MS: number;
+  /** Interval (ms) between periodic socket token expiry checks. Default: 60000 */
+  SOCKET_TOKEN_CHECK_INTERVAL_MS: number;
+  /** Grace period (ms) granted after a socket token expires. Default: 30000 */
+  SOCKET_TOKEN_GRACE_PERIOD_MS: number;
+  /** Maximum location updates accepted in a single offline-sync batch. Default: 500 */
+  SYNC_BATCH_SIZE_LIMIT: number;
+
+  // ── Driver location ingestion ─────────────────────────────────
+  /** TTL (s) of the Redis dedup key for a location update. Default: 60 */
+  LOCATION_DEDUP_TTL_SECONDS: number;
+  /** Maximum age (ms) of a location update before it is rejected. Default: 300000 */
+  LOCATION_MAX_AGE_MS: number;
+  /** Clock-skew tolerance (ms) for future-dated location updates. Default: 30000 */
+  LOCATION_MAX_FUTURE_MS: number;
+  /** Default radius (m) used by driver proximity searches. Default: 5000 */
+  DRIVER_PROXIMITY_DEFAULT_RADIUS_M: number;
+  /** Hard cap (m) on the radius a proximity search may request. Default: 50000 */
+  DRIVER_PROXIMITY_MAX_RADIUS_M: number;
+  /** Maximum number of drivers returned by a proximity search. Default: 50 */
+  DRIVER_PROXIMITY_MAX_RESULTS: number;
+  /** Age (s) beyond which a driver location is considered stale. Default: 300 */
+  DRIVER_LOCATION_STALE_AFTER_SECONDS: number;
+
+  // ── ETA cache / routing ──────────────────────────────────────
+  /** TTL (s) for cached ETA computations. Default: 600 */
+  ETA_CACHE_TTL_SECONDS: number;
+  /** Geohash precision used to key the ETA cache. Default: 7 */
+  ETA_GEOHASH_PRECISION: number;
+  /** Google Maps Directions API key. Blank disables live routing. */
+  GOOGLE_MAPS_API_KEY: string;
+  /** OpenWeather current-weather API key. Blank prevents live fee estimates. */
+  OPENWEATHER_API_KEY: string;
+
+  // ── Lifecycle / jobs ──────────────────────────────────────────
+  /** Time (ms) allowed for in-flight work to drain on shutdown. Default: 30000 */
+  SHUTDOWN_TIMEOUT_MS: number;
+  /** Cron expression driving the escrow monitor job. Default: every 5 minutes */
+  ESCROW_MONITOR_CRON: string;
+  /** Lock TTL (s) after which a still-locked escrow is flagged as expired. Default: 86400 (24h) */
+  ESCROW_LOCK_TTL_SECONDS: number;
+
+  // ── Stellar / Soroban network ─────────────────────────────────
+  /** Target Stellar network. Default: testnet */
+  STELLAR_NETWORK: 'mainnet' | 'testnet' | 'futurenet';
+  /** Soroban RPC endpoint. Blank resolves to the default URL for the network. */
+  SOROBAN_RPC_URL: string;
+  /** Network passphrase. Blank resolves to the well-known value for the network. */
+  STELLAR_NETWORK_PASSPHRASE: string;
+  /** Per-request HTTP timeout (ms) for Soroban RPC calls. Default: 10000 */
   SOROBAN_RPC_TIMEOUT_MS: number;
   /** Optional at boot; endpoints that need it return 503. */
   SOROBAN_ESCROW_CONTRACT_ID?: string;
@@ -185,18 +256,79 @@ const envSchema = z.object({
   PROFILE_PICTURE_HEIGHT: z.string().optional(),
   PROFILE_PICTURE_QUALITY: z.string().optional(),
 
-  // ── Soroban RPC retry config ───────────────────────────────────────────────
-  SOROBAN_RPC_MAX_RETRIES: numeric(z.coerce.number().int().min(1).max(20).default(3)),
-  SOROBAN_RPC_RETRY_BASE_MS: numeric(z.coerce.number().int().min(50).default(250)),
-  SOROBAN_RPC_RETRY_MAX_MS: numeric(z.coerce.number().int().min(500).default(8000)),
-  STELLAR_BAD_SEQ_MAX_RETRIES: numeric(z.coerce.number().int().min(1).max(10).default(3)),
+  // ── Uploads / evidence storage ─────────────────────────────────────────────
+  APP_BASE_URL: z.string().trim().default('http://localhost:3000'),
+  UPLOAD_MAX_FILE_SIZE_MB: z.coerce.number().int().min(1).max(100).default(10),
+  AWS_REGION: z.string().trim().default('us-east-1'),
+  AWS_ACCESS_KEY_ID: z.string().trim().default(''),
+  AWS_SECRET_ACCESS_KEY: z.string().trim().default(''),
+  AWS_S3_SIGNED_URL_EXPIRES_SECONDS: z.coerce.number().int().min(1).default(900),
 
-  // ── Soroban / Stellar connection ───────────────────────────────────────────
-  STELLAR_NETWORK: z.enum(['mainnet', 'testnet', 'futurenet']).default('testnet'),
-  SOROBAN_RPC_URL: z.string().optional(),
-  STELLAR_NETWORK_PASSPHRASE: z.string().optional(),
-  SOROBAN_RPC_TIMEOUT_MS: numeric(z.coerce.number().int().min(1).default(10000)),
-  SOROBAN_ESCROW_CONTRACT_ID: z.string().optional(),
+  // ── Indexer lag monitoring ─────────────────────────────────────────────────
+  INDEXER_LAG_ALERT_THRESHOLD: z.coerce.number().int().min(1).default(100),
+  INDEXER_LAG_CHECK_INTERVAL_MS: z.coerce.number().int().min(1000).default(60000),
+  INDEXER_LAG_WEBHOOK_URL: z.string().trim().default(''),
+
+  // ── Soroban RPC retry config ────────────────────────────────────────────────
+  SOROBAN_RPC_MAX_RETRIES: z.coerce.number().int().min(1).max(20).default(3),
+  SOROBAN_RPC_RETRY_BASE_MS: z.coerce.number().int().min(50).default(250),
+  SOROBAN_RPC_RETRY_MAX_MS: z.coerce.number().int().min(500).default(8000),
+  STELLAR_BAD_SEQ_MAX_RETRIES: z.coerce.number().int().min(1).max(10).default(3),
+
+  // ── Push notifications (Firebase Cloud Messaging) ───────────────────────────
+  FCM_PROJECT_ID: z.string().default(''),
+  FCM_CLIENT_EMAIL: z.string().default(''),
+  FCM_PRIVATE_KEY: z.string().default(''),
+  FCM_REQUEST_TIMEOUT_MS: z.coerce.number().int().min(1000).default(10000),
+
+  // ── Bulk delivery CSV import ────────────────────────────────────────────────
+  BULK_UPLOAD_MAX_BYTES: z.coerce
+    .number()
+    .int()
+    .min(1024)
+    .default(5 * 1024 * 1024),
+  BULK_UPLOAD_MAX_ROWS: z.coerce.number().int().min(1).max(10000).default(1000),
+
+  // ── Socket.IO transport tuning ────────────────────────────────────
+  SOCKET_PING_INTERVAL_MS: z.coerce.number().int().min(1000).default(25000),
+  SOCKET_PING_TIMEOUT_MS: z.coerce.number().int().min(1000).default(20000),
+  SOCKET_MAX_MISSED_PONGS: z.coerce.number().int().min(1).max(10).default(2),
+  SOCKET_MESSAGE_ACK_TIMEOUT_MS: z.coerce.number().int().min(1000).default(15000),
+  SOCKET_TOKEN_CHECK_INTERVAL_MS: z.coerce.number().int().min(1000).default(60000),
+  SOCKET_TOKEN_GRACE_PERIOD_MS: z.coerce.number().int().min(0).default(30000),
+  SYNC_BATCH_SIZE_LIMIT: z.coerce.number().int().min(1).max(10000).default(500),
+
+  // ── Driver location ingestion ─────────────────────────────────
+  LOCATION_DEDUP_TTL_SECONDS: z.coerce.number().int().min(1).default(60),
+  LOCATION_MAX_AGE_MS: z.coerce.number().int().min(1000).default(300000),
+  LOCATION_MAX_FUTURE_MS: z.coerce.number().int().min(0).default(30000),
+  DRIVER_PROXIMITY_DEFAULT_RADIUS_M: z.coerce.number().int().min(1).default(5000),
+  DRIVER_PROXIMITY_MAX_RADIUS_M: z.coerce.number().int().min(1).default(50000),
+  DRIVER_PROXIMITY_MAX_RESULTS: z.coerce.number().int().min(1).max(500).default(50),
+  DRIVER_LOCATION_STALE_AFTER_SECONDS: z.coerce.number().int().min(1).default(300),
+
+  // ── ETA cache / routing ──────────────────────────────────────
+  ETA_CACHE_TTL_SECONDS: z.coerce.number().int().min(1).default(600),
+  ETA_GEOHASH_PRECISION: z.coerce.number().int().min(1).max(12).default(7),
+  GOOGLE_MAPS_API_KEY: z.string().default(''),
+  OPENWEATHER_API_KEY: z.string().default(''),
+
+  // ── Lifecycle / jobs ──────────────────────────────────────────
+  SHUTDOWN_TIMEOUT_MS: z.coerce.number().int().min(1000).default(30000),
+  ESCROW_MONITOR_CRON: z.string().trim().min(1).default('*/5 * * * *'),
+  ESCROW_LOCK_TTL_SECONDS: z.coerce.number().int().min(1).default(86400),
+
+  // ── Stellar / Soroban network ─────────────────────────────────
+  STELLAR_NETWORK: z
+    .string()
+    .trim()
+    .toLowerCase()
+    .pipe(z.enum(['mainnet', 'testnet', 'futurenet']))
+    .default('testnet'),
+  SOROBAN_RPC_URL: z.string().trim().default(''),
+  STELLAR_NETWORK_PASSPHRASE: z.string().trim().default(''),
+  SOROBAN_RPC_TIMEOUT_MS: z.coerce.number().int().min(1000).default(10000),
+  SOROBAN_ESCROW_CONTRACT_ID: z.string().trim().default(''),
   SOROBAN_ESCROW_LOCK_FUNCTION: z.string().trim().min(1).default('lock_escrow'),
   STELLAR_BASE_FEE: numeric(z.coerce.number().int().min(1).default(100)),
   STELLAR_TRANSACTION_TIMEOUT_SECONDS: numeric(z.coerce.number().int().min(1).default(300)),
