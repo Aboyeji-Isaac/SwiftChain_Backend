@@ -1,6 +1,6 @@
 import http from 'http';
-import dotenv from 'dotenv';
 import app from './app';
+import env from './config/env';
 import logger from './config/logger';
 import { startIndexerLagMonitor } from './services/monitorService';
 import {
@@ -14,8 +14,6 @@ import { startAutoAssignmentJob, stopAutoAssignmentJob } from './jobs/autoAssign
 import { startEventPoller, stopEventPoller } from './services/eventPoller';
 import { initializeRedis, disconnectRedis } from './config/redis';
 import env from './config/env';
-
-dotenv.config();
 
 const PORT = env.PORT;
 
