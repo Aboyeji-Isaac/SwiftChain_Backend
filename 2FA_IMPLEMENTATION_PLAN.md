@@ -1,6 +1,6 @@
 # 2FA Implementation Plan - Issue #126
 
-## Overview
+##Overview
 
 This document provides a detailed implementation plan for Two-Factor Authentication (2FA) via Authenticator App (TOTP). The feature will enhance security for Admin and Merchant accounts by requiring a time-based one-time password (TOTP) during login, along with backup codes for account recovery.
 
