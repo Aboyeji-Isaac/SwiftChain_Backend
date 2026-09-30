@@ -14,7 +14,6 @@ import {
   InterServerEvents,
   SocketData,
 } from './socket.types';
-import env from '../config/env';
 
 /**
  * Room name prefix for delivery-scoped broadcast rooms.
