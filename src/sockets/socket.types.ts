@@ -1,6 +1,19 @@
 import { Socket } from 'socket.io';
 
 /**
+ * Payload broadcast to a delivery room when the escrow indexer confirms a
+ * status change on-chain (see `emitDeliveryStatusUpdated`).
+ */
+export interface DeliveryStatusUpdatedPayload {
+  /** Stellar contract id whose event carried the status change. */
+  contractId: string;
+  /** Delivery the status change applies to. */
+  deliveryId: string;
+  /** New canonical status (see `DeliveryStatus`). */
+  status: string;
+}
+
+/**
  * Metadata stored for each active socket connection.
  */
 export interface SocketConnectionMeta {
@@ -199,6 +212,8 @@ export interface ServerToClientEvents {
   auth_expired: (payload?: AuthExpiredPayload) => void;
   /** Acknowledge a client's token refresh attempt */
   auth_refresh_ack: (payload: AuthRefreshAckPayload) => void;
+  /** Push a chain-confirmed delivery status change to a delivery room. */
+  delivery_status_updated: (payload: DeliveryStatusUpdatedPayload) => void;
 }
 
 /**

@@ -14,9 +14,16 @@ import {
   InterServerEvents,
   SocketData,
   TypedSocket,
+  DeliveryStatusUpdatedPayload,
 } from './socket.types';
 import jwt from 'jsonwebtoken';
-import env from '../config/env';
+
+/**
+ * The live server instance, captured by {@link initializeSocketServer} and
+ * cleared by {@link shutdownSocketServer}. Module-level state is safe here:
+ * a Node.js process runs one Socket.IO server (see the module doc above).
+ */
+let liveServer: TypedServer | null = null;
 
 /**
  * Typed Socket.IO server alias used throughout the sockets layer.
@@ -155,9 +162,40 @@ export function initializeSocketServer(httpServer: HttpServer): TypedServer {
   // ─── Application-level health checks ──────────────────────────────────────
   socketService.startHealthChecks(io);
 
+  // Capture the live instance so server-side emitters (indexer, jobs) can
+  // broadcast without holding a reference to the HTTP server.
+  liveServer = io;
+
   logger.info('[Socket] Socket.IO server initialised and health-check loop started');
 
   return io;
+}
+
+/**
+ * Single live Socket.IO entry point: this module is the ONLY server the
+ * process starts (`src/server.ts` → `initializeSocketServer`), so all
+ * realtime emits route through here — including server-side pushes from
+ * background services such as the escrow indexer below.
+ *
+ * Broadcast a chain-confirmed delivery status change to the delivery's room
+ * (`delivery:<id>`, joined via `join_room`). Safe to call before the server
+ * is initialised or after shutdown: it logs and returns instead of throwing,
+ * so a socket outage can never fail the indexer's DB write (issue #212).
+ *
+ * @param deliveryId - Delivery the status change applies to; names the room.
+ * @param payload    - Contract id, delivery id and new status to broadcast.
+ */
+export function emitDeliveryStatusUpdated(
+  deliveryId: string,
+  payload: DeliveryStatusUpdatedPayload,
+): void {
+  if (!liveServer) {
+    logger.warn(
+      `[Socket] delivery_status_updated dropped for delivery=${deliveryId} — Socket.IO server not initialised`,
+    );
+    return;
+  }
+  liveServer.to(`delivery:${deliveryId}`).emit('delivery_status_updated', payload);
 }
 
 /**
@@ -172,6 +210,9 @@ export function initializeSocketServer(httpServer: HttpServer): TypedServer {
 export async function shutdownSocketServer(io: TypedServer): Promise<void> {
   socketService.stopHealthChecks();
 
+  // Drop the emit target first so a late in-flight emit logs instead of
+  // writing to a closing server.
+  liveServer = null;
   const activeBefore = socketService.getConnectionCount();
   logger.info(`[Socket] Draining ${activeBefore} active connection(s)...`);
 

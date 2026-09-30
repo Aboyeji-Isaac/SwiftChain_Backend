@@ -1,7 +1,6 @@
 import { rpc as StellarRpc, Networks, StrKey } from '@stellar/stellar-sdk';
 import env, { StellarNetwork } from './env';
 import logger from './logger';
-import env from './env';
 
 /**
  * Supported Stellar network aliases.
@@ -62,8 +61,6 @@ function resolveStellarConfig(): StellarConfig {
   // Prefer explicit passphrase env var; fall back to the well-known value for
   // the configured network.
   const networkPassphrase = env.STELLAR_NETWORK_PASSPHRASE?.trim() || NETWORK_PASSPHRASES[network];
-
-  const timeoutMs = env.SOROBAN_RPC_TIMEOUT_MS;
 
   if (!rpcUrl) {
     throw new Error('SOROBAN_RPC_URL is required and could not be resolved.');

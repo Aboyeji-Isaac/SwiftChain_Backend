@@ -14,7 +14,6 @@ import { startAutoAssignmentJob, stopAutoAssignmentJob } from './jobs/autoAssign
 import { startDriverRatingJob, stopDriverRatingJob } from './jobs/driverRatingJob';
 import { startEventPoller, stopEventPoller } from './services/eventPoller';
 import { initializeRedis, disconnectRedis } from './config/redis';
-import env from './config/env';
 
 const PORT = env.PORT;
 
