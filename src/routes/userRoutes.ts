@@ -5,6 +5,7 @@ import requireRole from '../middleware/requireRole';
 import validate from '../middleware/validate';
 import { updateWalletSchema } from '../validators/userValidator';
 import { UserRole } from '../interfaces/IUser';
+import { buildQueryOptions } from '../middlewares/queryMiddleware';
 
 const router = Router();
 
@@ -29,6 +30,16 @@ router.get(
   '/deleted',
   authMiddleware,
   requireRole(UserRole.ADMIN),
+  buildQueryOptions({
+    sortableFields: ['deletedAt', 'createdAt'],
+    filterableFields: {
+      role: 'string',
+      status: 'string',
+    },
+    searchableFields: ['email', 'firstName', 'lastName'],
+    defaultSort: { deletedAt: -1 },
+    defaultLimit: 10,
+  }),
   userController.listDeletedUsers,
 );
 

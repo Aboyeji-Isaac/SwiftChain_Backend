@@ -12,6 +12,19 @@ import requireRole from '../middleware/requireRole';
 import { UserRole } from '../interfaces/IUser';
 import { estimateFeeSchema } from '../validators/pricingValidator';
 import { pricingController } from '../controllers/pricingController';
+import { buildQueryOptions } from '../middlewares/queryMiddleware';
+
+/** Shared query contract for the delivery list endpoints (docs/query-contract.md). */
+const deliveryListQuery = buildQueryOptions({
+  sortableFields: ['createdAt'],
+  filterableFields: {
+    status: 'string',
+    driver: 'string',
+  },
+  searchableFields: ['trackingNumber', 'customer.name', 'customer.phone'],
+  defaultSort: { createdAt: -1 },
+  defaultLimit: 10,
+});
 
 const router = Router();
 
@@ -19,7 +32,7 @@ const router = Router();
 router.post(
   '/fee-estimate',
   authenticate,
-  validateRequest({ body: estimateFeeSchema }),
+  validate({ body: estimateFeeSchema }),
   pricingController.estimate.bind(pricingController),
 );
 
@@ -92,7 +105,7 @@ router.post(
   deliveryController.create.bind(deliveryController),
 );
 
-router.get('/', deliveryController.list.bind(deliveryController));
+router.get('/', deliveryListQuery, deliveryController.list.bind(deliveryController));
 
 /**
  * @openapi
@@ -119,7 +132,11 @@ router.get('/', deliveryController.list.bind(deliveryController));
  *             schema:
  *               $ref: '#/components/schemas/DeliveryListResponse'
  */
-router.get('/archived', deliveryController.listArchived.bind(deliveryController));
+router.get(
+  '/archived',
+  deliveryListQuery,
+  deliveryController.listArchived.bind(deliveryController),
+);
 
 /**
  * @openapi

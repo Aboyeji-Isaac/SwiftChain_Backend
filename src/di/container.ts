@@ -64,12 +64,13 @@ import * as evidenceService from '../services/evidenceService';
 import { indexerService } from '../services/indexerService';
 import * as monitorService from '../services/monitorService';
 import { idempotencyService } from '../services/idempotency.service';
+import { SdkSorobanRpcClient } from '../services/providers/adapters';
+import { getStorageDriver } from '../services/storage.service';
 
 // ─── Controllers ───────────────────────────────────────────────────────────
 // Import controller singleton instances (already instantiated in their modules)
 import authController from '../controllers/authController';
 import { deliveryController } from '../controllers/delivery.controller';
-import * as deliveryCrudController from '../controllers/deliveryCrudController';
 import * as deliveryStatusController from '../controllers/deliveryStatusController';
 import { driverController } from '../controllers/driverController';
 import { driverRatingController } from '../controllers/driverRatingController';
@@ -150,6 +151,11 @@ export function createDIContainer(): AwilixContainer {
     [TOKENS.indexerService]: asValue(indexerService),
     [TOKENS.monitorService]: asValue(monitorService),
     [TOKENS.idempotencyService]: asValue(idempotencyService),
+
+    // ─── External SDK clients behind provider interfaces (issue #222) ─────
+    [TOKENS.routingProvider]: asValue(routingService),
+    [TOKENS.sorobanRpcClient]: asValue(new SdkSorobanRpcClient()),
+    [TOKENS.imagesStorage]: asValue(getStorageDriver()),
   });
 
   // ─── Register Controllers (Singleton) ──────────────────────────────────
@@ -161,7 +167,6 @@ export function createDIContainer(): AwilixContainer {
   container.register({
     [TOKENS.authController]: asValue(authController),
     [TOKENS.deliveryController]: asValue(deliveryController),
-    [TOKENS.deliveryCrudController]: asValue(deliveryCrudController),
     [TOKENS.deliveryStatusController]: asValue(deliveryStatusController),
     [TOKENS.driverController]: asValue(driverController),
     [TOKENS.driverRatingController]: asValue(driverRatingController),

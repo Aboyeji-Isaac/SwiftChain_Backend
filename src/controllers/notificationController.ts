@@ -5,6 +5,7 @@ import type { IUser } from '../interfaces/IUser';
 import { NotificationEvent } from '../models/NotificationPreference';
 import { notificationService } from '../services/notificationService';
 import AppError from '../utils/AppError';
+import { resolveQueryOptions, buildPaginationMeta } from '../middlewares/queryMiddleware';
 
 /**
  * NotificationController — HTTP surface for push notification preferences,
@@ -38,10 +39,8 @@ export const unregisterDeviceSchema = z.object({
 });
 
 /** Query accepted by `GET /api/v1/notifications`. */
-export const listNotificationsSchema = z.object({
-  page: z.coerce.number().int().min(1).default(1),
-  limit: z.coerce.number().int().min(1).max(100).default(20),
-});
+// Pagination/validation for GET /notifications is handled by the shared
+// `buildQueryOptions` middleware; the controller reads `req.queryOptions`.
 
 // ─── Helpers ───────────────────────────────────────────────────────────────────
 
@@ -181,18 +180,19 @@ export const listNotifications = async (
   next: NextFunction,
 ): Promise<void> => {
   try {
-    const { page, limit } = req.query as unknown as z.infer<typeof listNotificationsSchema>;
-    const result = await notificationService.listForUser(requireUserId(req), page, limit);
+    const { filter, page, limit, sort } = resolveQueryOptions(req);
+
+    const result = await notificationService.listForUser(requireUserId(req), {
+      filter,
+      page,
+      limit,
+      sort,
+    });
 
     res.status(StatusCodes.OK).json({
       status: 'success',
       data: result.data,
-      pagination: {
-        total: result.total,
-        page: result.page,
-        limit: result.limit,
-        totalPages: result.totalPages,
-      },
+      meta: buildPaginationMeta(result.total, result.page, result.limit),
     });
   } catch (error) {
     next(error);

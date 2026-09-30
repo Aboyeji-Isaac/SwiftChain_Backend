@@ -1,5 +1,5 @@
 import { StatusCodes } from 'http-status-codes';
-import mongoose from 'mongoose';
+import mongoose, { SortOrder } from 'mongoose';
 import Dispute, { DisputeReason, DisputeStatus, IDispute } from '../models/Dispute';
 import Delivery, { DeliveryStatus } from '../models/Delivery';
 import { sorobanService } from '../blockchain/soroban.service';
@@ -100,43 +100,27 @@ export const getDisputeById = async (id: string): Promise<IDispute> => {
   return dispute;
 };
 
-export const getDisputes = async (filters: DisputeFilter) => {
-  const { status, raisedBy, deliveryId, reason, page = 1, limit = 10 } = filters;
-  const query: Record<string, unknown> = {};
+export const getDisputes = async (
+  filters: Pick<DisputeFilter, 'page' | 'limit'> & {
+    /** Whitelisted filter produced by the shared query middleware. */
+    filter?: Record<string, unknown>;
+    sort?: Record<string, SortOrder>;
+  },
+) => {
+  const { filter = {}, page = 1, limit = 10, sort = { createdAt: -1 } } = filters;
+  const query: Record<string, unknown> = { ...filter };
 
-  if (status) {
-    query.status = status;
+  if (typeof query.raisedBy === 'string' && !mongoose.Types.ObjectId.isValid(query.raisedBy)) {
+    throw new AppError('Invalid raisedBy format.', StatusCodes.BAD_REQUEST);
   }
 
-  if (raisedBy) {
-    if (!mongoose.Types.ObjectId.isValid(raisedBy)) {
-      throw new AppError('Invalid raisedBy format.', StatusCodes.BAD_REQUEST);
-    }
-    query.raisedBy = raisedBy;
-  }
-
-  if (deliveryId) {
-    if (!mongoose.Types.ObjectId.isValid(deliveryId)) {
-      throw new AppError('Invalid deliveryId format.', StatusCodes.BAD_REQUEST);
-    }
-    query.deliveryId = deliveryId;
-  }
-
-  if (reason) {
-    if (!Object.values(DisputeReason).includes(reason)) {
-      throw new AppError('Invalid dispute reason.', StatusCodes.BAD_REQUEST);
-    }
-    query.reason = reason;
+  if (typeof query.deliveryId === 'string' && !mongoose.Types.ObjectId.isValid(query.deliveryId)) {
+    throw new AppError('Invalid deliveryId format.', StatusCodes.BAD_REQUEST);
   }
 
   const skip = (page - 1) * limit;
   const [data, total] = await Promise.all([
-    Dispute.find(query)
-      .populate(populateOptions)
-      .sort({ createdAt: -1 })
-      .skip(skip)
-      .limit(limit)
-      .exec(),
+    Dispute.find(query).populate(populateOptions).sort(sort).skip(skip).limit(limit).exec(),
     Dispute.countDocuments(query).exec(),
   ]);
 

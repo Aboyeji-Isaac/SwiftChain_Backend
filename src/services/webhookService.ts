@@ -27,7 +27,7 @@
 import crypto from 'crypto';
 import axios from 'axios';
 import { StatusCodes } from 'http-status-codes';
-import { Types } from 'mongoose';
+import { Types, SortOrder } from 'mongoose';
 import {
   WebhookSubscription,
   IWebhookSubscription,
@@ -111,9 +111,44 @@ export class WebhookService {
   }
 
   /** List a merchant's registered webhooks, newest first. Secret is never included. */
-  async listForMerchant(merchantId: string): Promise<IWebhookSubscription[]> {
+  /**
+   * One page of the merchant's registered webhooks.
+   *
+   * `filter`/`sort` come from the shared query middleware whitelist; scoping
+   * to the authenticated merchant happens here.
+   */
+  async listForMerchant(
+    merchantId: string,
+    options: {
+      filter?: Record<string, unknown>;
+      page?: number;
+      limit?: number;
+      sort?: Record<string, SortOrder>;
+    } = {},
+  ): Promise<{
+    data: IWebhookSubscription[];
+    total: number;
+    page: number;
+    limit: number;
+    totalPages: number;
+  }> {
     this.assertValidObjectId(merchantId, 'merchantId');
-    return WebhookSubscription.find({ merchantId }).sort({ createdAt: -1 });
+    const { filter = {}, page = 1, limit = 20, sort = { createdAt: -1 } } = options;
+
+    const query = { ...filter, merchantId };
+    const skip = (page - 1) * limit;
+    const [data, total] = await Promise.all([
+      WebhookSubscription.find(query).sort(sort).skip(skip).limit(limit),
+      WebhookSubscription.countDocuments(query),
+    ]);
+
+    return {
+      data,
+      total,
+      page,
+      limit,
+      totalPages: Math.ceil(total / limit),
+    };
   }
 
   /** Fetch one webhook, scoped to its owning merchant. */

@@ -1,14 +1,16 @@
 import { Request, Response, NextFunction } from 'express';
 import httpStatus from 'http-status-codes';
-import { DeliveryStatus } from '../models/Delivery';
 import {
   deliveryService,
   CreateDeliveryInput,
   UpdateDeliveryInput,
-  DeliveryFilter,
   AssignDriverInput,
 } from '../services/delivery.service';
-import { sendSuccess } from '../utils/responseWrapper';
+// ETA lookups live in the dedicated delivery service; aliased so the two
+// service modules can be imported side by side.
+import { deliveryService as deliveryEtaService } from '../services/deliveryService';
+import { sendSuccess, sendError } from '../utils/responseWrapper';
+import { resolveQueryOptions, buildPaginationMeta } from '../middlewares/queryMiddleware';
 
 interface AuthenticatedRequest extends Request {
   user?: { id: string };
@@ -46,35 +48,47 @@ export class DeliveryController {
     }
   }
 
+  /**
+   * GET /api/v1/deliveries/:id/eta
+   *
+   * Calculates the delivery ETA from the stored pickup/dropoff coordinates.
+   *
+   * Responses:
+   *   200 — ETA calculated successfully.
+   *   400 — delivery ID missing.
+   *   404 — delivery not found.
+   *   500 — routing failure or delivery without complete coordinates.
+   */
+  async getDeliveryETA(req: Request, res: Response, _next: NextFunction): Promise<void> {
+    const { id } = req.params;
+
+    if (!id) {
+      sendError(res, 'Delivery ID is required', httpStatus.BAD_REQUEST);
+      return;
+    }
+
+    try {
+      const result = await deliveryEtaService.calculateDeliveryETA({ deliveryId: id });
+      sendSuccess(res, result, 'ETA calculated successfully', httpStatus.OK);
+    } catch (error: unknown) {
+      const errorMessage = error instanceof Error ? error.message : String(error);
+      const statusCode = errorMessage.includes('not found')
+        ? httpStatus.NOT_FOUND
+        : httpStatus.INTERNAL_SERVER_ERROR;
+      sendError(res, errorMessage || 'Failed to calculate ETA', statusCode);
+    }
+  }
+
   async list(req: Request, res: Response, next: NextFunction): Promise<void> {
     try {
-      const statusParam = req.query.status as string | undefined;
-      const statusNormalized = statusParam ? statusParam.toLowerCase() : undefined;
-      const validatedStatus = Object.values(DeliveryStatus).includes(
-        statusNormalized as DeliveryStatus,
-      )
-        ? (statusNormalized as DeliveryStatus)
-        : undefined;
+      const { filter, page, limit, sort } = resolveQueryOptions(req);
 
-      const filters: DeliveryFilter = {
-        status: validatedStatus,
-        driver: req.query.driver as string | undefined,
-        search: req.query.search as string | undefined,
-        page: req.query.page ? parseInt(req.query.page as string, 10) : 1,
-        limit: req.query.limit ? parseInt(req.query.limit as string, 10) : 10,
-      };
-
-      const result = await deliveryService.list(filters);
+      const result = await deliveryService.list({ filter, page, limit, sort });
       sendSuccess(
         res,
         {
           deliveries: result.data,
-          meta: {
-            total: result.total,
-            page: result.page,
-            limit: result.limit,
-            totalPages: result.totalPages,
-          },
+          meta: buildPaginationMeta(result.total, result.page, result.limit),
         },
         'Deliveries retrieved successfully',
         httpStatus.OK,
@@ -123,20 +137,14 @@ export class DeliveryController {
 
   async listArchived(req: Request, res: Response, next: NextFunction): Promise<void> {
     try {
-      const page = req.query.page ? parseInt(req.query.page as string, 10) : 1;
-      const limit = req.query.limit ? parseInt(req.query.limit as string, 10) : 10;
+      const { page, limit, sort } = resolveQueryOptions(req);
 
-      const result = await deliveryService.listArchived(page, limit);
+      const result = await deliveryService.listArchived(page, limit, sort);
       sendSuccess(
         res,
         {
           deliveries: result.data,
-          meta: {
-            total: result.total,
-            page: result.page,
-            limit: result.limit,
-            totalPages: result.totalPages,
-          },
+          meta: buildPaginationMeta(result.total, result.page, result.limit),
         },
         'Archived deliveries retrieved successfully',
         httpStatus.OK,

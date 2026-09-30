@@ -1,7 +1,10 @@
 import { Delivery, DeliveryStatus } from '../models/Delivery';
-import { routingService, ETARequest } from './routingService';
+import { ETARequest } from './providers/routingProvider';
+import type { IRoutingProvider } from './providers/routingProvider';
+import { routingService } from './routingService';
 import QRCode from 'qrcode';
 import { generateQrToken } from '../utils/qrToken';
+import AppError from '../utils/AppError';
 
 interface DeliveryETARequest {
   deliveryId: string;
@@ -27,6 +30,12 @@ interface DeliveryETAResponse {
 }
 
 class DeliveryService {
+  private readonly routing: IRoutingProvider;
+
+  constructor(routing: IRoutingProvider = routingService) {
+    this.routing = routing;
+  }
+
   async calculateDeliveryETA(request: DeliveryETARequest): Promise<DeliveryETAResponse> {
     const delivery = await Delivery.findOne({ deliveryId: request.deliveryId });
 
@@ -50,7 +59,7 @@ class DeliveryService {
       travelMode: 'driving',
     };
 
-    const etaResult = await routingService.calculateETA(routingRequest);
+    const etaResult = await this.routing.calculateETA(routingRequest);
 
     delivery.distance = etaResult.distance * 1000;
     delivery.estimatedDuration = etaResult.estimatedTime * 60;
@@ -103,20 +112,17 @@ class DeliveryService {
     const delivery = await Delivery.findById(deliveryId).lean();
 
     if (!delivery) {
-      const err = new Error('Delivery not found');
-      (err as any).statusCode = 404;
-      throw err;
+      throw new AppError('Delivery not found', 404);
     }
 
     // Validate delivery is in a handoff-eligible status
     // Use EXACT status values from Delivery schema
     const eligibleStatuses = [DeliveryStatus.IN_PROGRESS];
     if (!eligibleStatuses.includes(delivery.status as DeliveryStatus)) {
-      const err = new Error(
+      throw new AppError(
         `Delivery is not eligible for handoff. Current status: ${delivery.status}`,
+        400,
       );
-      (err as any).statusCode = 400;
-      throw err;
     }
 
     // Generate secure token

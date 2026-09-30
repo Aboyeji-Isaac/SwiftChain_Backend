@@ -11,6 +11,7 @@ import mongoose from 'mongoose';
 import Fleet from '../models/Fleet';
 import User from '../models/User';
 import { sendSuccess } from '../utils/responseWrapper';
+import { resolveQueryOptions, buildPaginationMeta } from '../middlewares/queryMiddleware';
 
 // ─── Request body types ────────────────────────────────────────────────────────
 
@@ -207,29 +208,24 @@ export const getAllFleets = async (
       throw new AppError('Authentication required.', StatusCodes.UNAUTHORIZED);
     }
 
-    const page = parseInt(req.query.page as string) || 1;
-    const limit = parseInt(req.query.limit as string) || 10;
-    const skip = (page - 1) * limit;
+    const { filter, page, limit, sort } = resolveQueryOptions(req);
 
-    const fleets = await Fleet.find({ isActive: true })
-      .skip(skip)
-      .limit(limit)
-      .sort({ createdAt: -1 })
-      .populate('ownerId', 'name email')
-      .populate('members.userId', 'name email role');
-
-    const total = await Fleet.countDocuments({ isActive: true });
+    const query = { isActive: true, ...filter };
+    const [fleets, total] = await Promise.all([
+      Fleet.find(query)
+        .sort(sort)
+        .skip((page - 1) * limit)
+        .limit(limit)
+        .populate('ownerId', 'name email')
+        .populate('members.userId', 'name email role'),
+      Fleet.countDocuments(query),
+    ]);
 
     sendSuccess(
       res,
       {
         fleets,
-        pagination: {
-          page,
-          limit,
-          total,
-          pages: Math.ceil(total / limit),
-        },
+        meta: buildPaginationMeta(total, page, limit),
       },
       'Fleets retrieved successfully',
       StatusCodes.OK,

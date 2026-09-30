@@ -268,6 +268,28 @@ export const resolveQueryOptions = (req: Request): QueryOptions =>
     filter: {},
   };
 
+/**
+ * Merges the middleware's `search` `$and` wrapper into a flat filter object
+ * so services can destructure their whitelisted keys directly.
+ *
+ * The combined filter is already a valid Mongoose query; this helper is only
+ * for services that need to inspect or normalise individual fields (e.g. to
+ * validate an enum value) before executing the query.
+ */
+export const flattenQueryFilter = (filter: FilterQuery<unknown>): Record<string, unknown> => {
+  const { $and, ...rest } = filter as Record<string, unknown>;
+
+  if (!Array.isArray($and)) {
+    return { ...rest };
+  }
+
+  const merged = $and.map((part) =>
+    typeof part === 'object' && part !== null ? (part as Record<string, unknown>) : {},
+  );
+
+  return { ...rest, ...Object.assign({}, ...merged) };
+};
+
 /** Derives the pagination metadata returned with every paginated response. */
 export const buildPaginationMeta = (
   totalItems: number,

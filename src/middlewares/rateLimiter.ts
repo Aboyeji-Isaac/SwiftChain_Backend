@@ -3,6 +3,9 @@ import env from '../config/env';
 
 const isTest = env.NODE_ENV === 'test' || !!process.env.JEST_WORKER_ID;
 
+/** Effectively-unbounded request cap used to disable limiting in tests. */
+const TEST_UNLIMITED_MAX = 1_000_000;
+
 /**
  * Strict rate limiter for authentication endpoints (login, register).
  * Prevents brute-force credential attacks.
