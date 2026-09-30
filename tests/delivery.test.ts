@@ -135,7 +135,7 @@ describe('Delivery API — GET /api/v1/deliveries', () => {
 
     expect(res.status).toBe(200);
     expect(res.body.data.deliveries).toHaveLength(2);
-    expect(res.body.data.meta.total).toBe(5);
+    expect(res.body.data.meta.totalItems).toBe(5);
     expect(res.body.data.meta.totalPages).toBe(3);
   });
 

@@ -1,4 +1,4 @@
-import { Types } from 'mongoose';
+import { Types, SortOrder } from 'mongoose';
 import { Asset, validateAsset } from './currencyService';
 import httpStatus from 'http-status-codes';
 import Delivery, { IDelivery, DeliveryStatus, ILocation, IPackage } from '../models/Delivery';
@@ -43,13 +43,16 @@ export interface AssignDriverInput {
   driverId: string;
 }
 
-export interface DeliveryFilter {
-  status?: DeliveryStatus;
-  driver?: string;
-  search?: string;
+/**
+ * Filter for the delivery list endpoint. The whitelisted fields are supplied
+ * by the shared query middleware; the service only normalises them.
+ */
+export type DeliveryFilter = {
+  filter?: Record<string, unknown>;
   page?: number;
   limit?: number;
-}
+  sort?: Record<string, SortOrder>;
+};
 
 export interface PaginatedResult<T> {
   data: T[];
@@ -116,32 +119,17 @@ export class DeliveryService {
   }
 
   async list(filters: DeliveryFilter): Promise<PaginatedResult<IDelivery>> {
-    const { status, driver, search, page = 1, limit = 10 } = filters;
+    const { filter, page = 1, limit = 10, sort = { createdAt: -1 } } = filters;
 
     const query: Record<string, unknown> = {
       // Soft-deleted deliveries are only exposed via GET /deliveries/archived.
       isDeleted: { $ne: true },
+      ...filter,
     };
-
-    if (status) {
-      query.status = status;
-    }
-
-    if (driver) {
-      query.driver = new Types.ObjectId(driver);
-    }
-
-    if (search) {
-      query.$or = [
-        { trackingNumber: { $regex: search, $options: 'i' } },
-        { 'customer.name': { $regex: search, $options: 'i' } },
-        { 'customer.phone': { $regex: search, $options: 'i' } },
-      ];
-    }
 
     const skip = (page - 1) * limit;
     const [data, total] = await Promise.all([
-      Delivery.find(query).sort({ createdAt: -1 }).skip(skip).limit(limit).exec(),
+      Delivery.find(query).sort(sort).skip(skip).limit(limit).exec(),
       Delivery.countDocuments(query).exec(),
     ]);
 
@@ -207,12 +195,16 @@ export class DeliveryService {
     return delivery.restore();
   }
 
-  async listArchived(page = 1, limit = 10): Promise<PaginatedResult<IDelivery>> {
+  async listArchived(
+    page = 1,
+    limit = 10,
+    sort: Record<string, SortOrder> = { deletedAt: -1 },
+  ): Promise<PaginatedResult<IDelivery>> {
     const skip = (page - 1) * limit;
     const [data, total] = await Promise.all([
       Delivery.find({ isDeleted: true })
         .setOptions({ includeDeleted: true })
-        .sort({ deletedAt: -1 })
+        .sort(sort)
         .skip(skip)
         .limit(limit)
         .exec(),

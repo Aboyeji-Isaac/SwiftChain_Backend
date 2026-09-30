@@ -1,10 +1,12 @@
 import { rpc as StellarRpc } from '@stellar/stellar-sdk';
 import CircuitBreaker from 'opossum';
 import logger from '../config/logger';
-import { sorobanRpcClient, stellarConfig } from '../config/stellar';
+import { stellarConfig } from '../config/stellar';
 import env from '../config/env';
 import { withRetry, RetryOptions } from '../utils/rpcRetry';
 import { createCircuitBreaker, fireWithBreaker } from '../utils/circuitBreaker';
+import type { ISorobanRpcClient } from '../services/providers/sorobanRpcClient';
+import { defaultSorobanRpcClient } from '../services/providers/adapters';
 
 /**
  * Result returned by a successful connectivity check.
@@ -55,7 +57,7 @@ export interface DegradedLedgerResult {
  * its own errors — is not double-wrapped.
  */
 export class SorobanService {
-  private readonly client: StellarRpc.Server;
+  private readonly client: ISorobanRpcClient;
 
   /**
    * Circuit breaker for this instance's Soroban RPC operations.
@@ -67,7 +69,7 @@ export class SorobanService {
   /** Counter so each service instance owns an isolated breaker. */
   private static instanceCount = 0;
 
-  constructor(client: StellarRpc.Server = sorobanRpcClient) {
+  constructor(client: ISorobanRpcClient = defaultSorobanRpcClient) {
     this.client = client;
 
     this.breaker = createCircuitBreaker<[() => Promise<unknown>], unknown>(

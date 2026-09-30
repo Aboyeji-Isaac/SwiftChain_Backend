@@ -189,9 +189,8 @@ SwiftChain_Backend/
 │   │       └── fcmProvider.ts     # Firebase Cloud Messaging implementation
 │   │
 │   ├── controllers/               # HTTP request handlers
-│   │   ├── delivery.controller.ts # Full delivery CRUD (uses delivery.service.ts)
-│   │   ├── deliveryController.ts  # ⚠ DEPRECATED — ETA endpoint only
-│   │   ├── deliveryCrudController.ts  # ⚠ DEPRECATED — basic CRUD exports
+│   │   ├── delivery.controller.ts # Canonical delivery controller (CRUD + ETA, uses delivery.service.ts)
+│   │   ├── deliveryController.ts  # ⚠ DEPRECATED — compatibility shim re-exporting delivery.controller.ts
 │   │   ├── deliveryStatusController.ts # Status transitions
 │   │   ├── escrow.controller.ts   # Escrow by delivery/contract + fund trigger
 │   │   ├── escrowController.ts    # ⚠ DEPRECATED — admin flagged escrows
@@ -865,9 +864,8 @@ New routes should use the middleware in `src/middlewares/`.
 
 | Status | File | Usage |
 |---|---|---|
-| Active | `src/controllers/delivery.controller.ts` | Full delivery CRUD via `delivery.service.ts` |
-| **DEPRECATED** | `src/controllers/deliveryController.ts` | ETA endpoint only (`GET /:id/eta`), wires to legacy `deliveryService` |
-| **DEPRECATED** | `src/controllers/deliveryCrudController.ts` | Exports `createDelivery`, `getDeliveries`, `getDeliveryById`, `assignDriver` as standalone functions |
+| Active | `src/controllers/delivery.controller.ts` | Full delivery CRUD (incl. `GET /:id/eta`) via `delivery.service.ts` |
+| **DEPRECATED** | `src/controllers/deliveryController.ts` | Compatibility shim — re-exports the canonical controller from `delivery.controller.ts` |
 
 #### Routes
 

@@ -1,10 +1,24 @@
 import { rpc as StellarRpc, scValToNative, xdr } from '@stellar/stellar-sdk';
-import { sorobanRpcClient } from '../config/stellar';
 import { escrowIndexerConfig } from '../config/escrow';
 import { escrowService, EscrowFundedInput } from '../services/escrow.service';
 import { escrowIndexerService } from '../services/escrowIndexerService';
 import { EscrowResolvedEvent } from './types/escrowEvents';
 import logger from '../config/logger';
+import type { ISorobanRpcClient } from '../services/providers/sorobanRpcClient';
+import { defaultSorobanRpcClient } from '../services/providers/adapters';
+
+/**
+ * Soroban RPC client used by the escrow event sync functions.
+ *
+ * Defaults to the shared SDK adapter; tests can swap in a fake via
+ * {@link setEscrowRpcClient} instead of reaching for module mocking.
+ */
+let sorobanRpcClient: ISorobanRpcClient = defaultSorobanRpcClient;
+
+/** Replace the RPC client used by the escrow handlers (test seam). */
+export function setEscrowRpcClient(client: ISorobanRpcClient): void {
+  sorobanRpcClient = client;
+}
 
 /**
  * Native representation of the `escrow_funded` event emitted by the escrow

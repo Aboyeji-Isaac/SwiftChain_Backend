@@ -1,8 +1,8 @@
 import { StatusCodes } from 'http-status-codes';
-import mongoose from 'mongoose';
+import mongoose, { SortOrder } from 'mongoose';
 import User from '../models/User';
 import DriverProfile from '../models/DriverProfile';
-import Delivery, { IDelivery } from '../models/Delivery';
+import Delivery from '../models/Delivery';
 import { IUser, UserRole, UserStatus } from '../interfaces/IUser';
 import { AppError } from '../utils/AppError';
 import logger from '../config/logger';
@@ -31,6 +31,8 @@ export interface UserFilter {
   page?: number;
   limit?: number;
   includeDeleted?: boolean;
+  /** Whitelisted filter produced by the shared query middleware. */
+  filter?: Record<string, unknown>;
 }
 
 export interface PaginatedUserResult {
@@ -183,12 +185,11 @@ export class UserService {
     let driverProfileDeleted = false;
     let deliveriesDeleted = 0;
 
-    // Cascade: soft-delete driver profile
+    // Cascade: soft-delete driver profile. `softDelete` is declared on the
+    // schema's methods, so the hydrated document type already carries it.
     const driverProfile = await DriverProfile.findOne({ userId: id });
     if (driverProfile) {
-      await (
-        driverProfile as unknown as { softDelete(userId?: string): Promise<unknown> }
-      ).softDelete(userId);
+      await driverProfile.softDelete(userId);
       driverProfileDeleted = true;
     }
 
@@ -207,7 +208,7 @@ export class UserService {
       .setOptions({ includeDeleted: true })
       .exec();
     for (const delivery of deliveries) {
-      await (delivery as unknown as IDelivery).softDelete(userId);
+      await delivery.softDelete(userId);
       deliveriesDeleted++;
     }
 
@@ -257,30 +258,18 @@ export class UserService {
   /**
    * List soft-deleted users.
    */
-  async getDeletedUsers(filters: Omit<UserFilter, 'includeDeleted'>): Promise<PaginatedUserResult> {
-    const { page = 1, limit = 10, ...rest } = filters;
+  async getDeletedUsers(
+    filters: Omit<UserFilter, 'includeDeleted'> & {
+      sort?: Record<string, SortOrder>;
+    },
+  ): Promise<PaginatedUserResult> {
+    const { page = 1, limit = 10, filter, sort = { deletedAt: -1 } } = filters;
 
-    const query: Record<string, unknown> = { isDeleted: true };
-
-    if (rest.role) {
-      query.role = rest.role;
-    }
-
-    if (rest.status) {
-      query.status = rest.status;
-    }
-
-    if (rest.search) {
-      query.$or = [
-        { email: { $regex: rest.search, $options: 'i' } },
-        { firstName: { $regex: rest.search, $options: 'i' } },
-        { lastName: { $regex: rest.search, $options: 'i' } },
-      ];
-    }
+    const query: Record<string, unknown> = { isDeleted: true, ...filter };
 
     const skip = (page - 1) * limit;
     const [data, total] = await Promise.all([
-      User.find(query).sort({ deletedAt: -1 }).skip(skip).limit(limit).exec(),
+      User.find(query).sort(sort).skip(skip).limit(limit).exec(),
       User.countDocuments(query).exec(),
     ]);
 

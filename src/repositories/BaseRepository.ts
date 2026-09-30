@@ -75,13 +75,16 @@ export abstract class BaseRepository<T extends Document> implements IRepository<
   async createMany(data: Partial<T>[], options?: WriteOptions): Promise<T[]> {
     if (data.length === 0) return [];
 
-    const inserted = await this.model.insertMany(data, {
+    // With `rawResult: false` the driver resolves to the hydrated documents
+    // themselves; typing the promise generically keeps that contract explicit
+    // without an unsafe cast.
+    const inserted = (await this.model.insertMany(data, {
       session: options?.session,
       ordered: options?.ordered ?? true,
       rawResult: false,
-    });
+    })) as unknown[];
 
-    return inserted as unknown as T[];
+    return inserted.filter((doc): doc is T => doc !== null && typeof doc === 'object');
   }
 
   async findById(id: string, options?: ReadOptions<T>): Promise<T | null> {

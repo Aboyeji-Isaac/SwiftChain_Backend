@@ -1,5 +1,6 @@
 import EventLog, { IEventLog } from '../models/EventLog';
 import logger from '../config/logger';
+import type { SortOrder } from 'mongoose';
 
 export class EventLogService {
   /**
@@ -56,12 +57,38 @@ export class EventLogService {
   /**
    * Get all unprocessed events
    */
-  async getUnprocessedEvents(): Promise<IEventLog[]> {
+  async getUnprocessedEvents(
+    page = 1,
+    limit = 20,
+    sort: Record<string, SortOrder> = { createdAt: 1 },
+  ): Promise<{
+    data: IEventLog[];
+    total: number;
+    page: number;
+    limit: number;
+    totalPages: number;
+  }> {
     try {
-      return await EventLog.find({ status: 'pending' }).sort({ createdAt: 1 }).limit(100);
+      const safePage = Math.max(1, page);
+      const safeLimit = Math.min(Math.max(1, limit), 100);
+      const query = { status: 'pending' };
+      const skip = (safePage - 1) * safeLimit;
+
+      const [data, total] = await Promise.all([
+        EventLog.find(query).sort(sort).skip(skip).limit(safeLimit),
+        EventLog.countDocuments(query),
+      ]);
+
+      return {
+        data,
+        total,
+        page: safePage,
+        limit: safeLimit,
+        totalPages: Math.ceil(total / safeLimit),
+      };
     } catch (error) {
       logger.error('Error fetching unprocessed events:', error);
-      return [];
+      return { data: [], total: 0, page, limit, totalPages: 0 };
     }
   }
 

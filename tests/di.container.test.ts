@@ -161,6 +161,9 @@ describe('DI Container', () => {
         TOKENS.indexerService,
         TOKENS.monitorService,
         TOKENS.idempotencyService,
+        TOKENS.routingProvider,
+        TOKENS.sorobanRpcClient,
+        TOKENS.imagesStorage,
       ];
 
       services.forEach((token) => {

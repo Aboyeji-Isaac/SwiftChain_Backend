@@ -12,6 +12,7 @@ import {
   rotateWebhookSecret,
 } from '../controllers/webhookController';
 import { registerWebhookSchema, updateWebhookSchema } from '../validators/webhookValidator';
+import { buildQueryOptions } from '../middlewares/queryMiddleware';
 
 const router = Router();
 
@@ -32,7 +33,18 @@ router.post('/', validate({ body: registerWebhookSchema }), registerWebhook);
  * @desc    List the authenticated merchant's registered webhooks
  * @access  Merchant (enterprise) or admin
  */
-router.get('/', listWebhooks);
+router.get(
+  '/',
+  buildQueryOptions({
+    sortableFields: ['createdAt'],
+    filterableFields: {
+      isActive: 'boolean',
+    },
+    defaultSort: { createdAt: -1 },
+    defaultLimit: 20,
+  }),
+  listWebhooks,
+);
 
 /**
  * @route   GET /api/v1/webhooks/:id

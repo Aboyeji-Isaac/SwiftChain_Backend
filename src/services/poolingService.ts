@@ -13,6 +13,7 @@ import { DriverLocation } from '../models/DriverLocation';
 import { driverLocationService, NearbyDriver } from './driverLocationService';
 import { deliveryService } from './delivery.service';
 import { routingService } from './routingService';
+import type { IRoutingProvider } from './providers/routingProvider';
 import { encodeGeohash } from '../utils/geohash';
 import logger from '../config/logger';
 import env from '../config/env';
@@ -62,8 +63,14 @@ export interface AssignPoolResult {
 // ─── Service ──────────────────────────────────────────────────────────────────
 
 export class PoolingService {
+  private readonly routing: IRoutingProvider;
+
   private readonly DEFAULT_PROXIMITY_M = 2000;
   private readonly DEFAULT_MAX_POOL_SIZE = 5;
+
+  constructor(routing: IRoutingProvider = routingService) {
+    this.routing = routing;
+  }
 
   /**
    * Find pending/funded deliveries and group them into proximity-based pools.
@@ -249,7 +256,7 @@ export class PoolingService {
     for (let i = 0; i < routeSequence.length - 1; i++) {
       const from = routeSequence[i].coordinates;
       const to = routeSequence[i + 1].coordinates;
-      const eta = await routingService.calculateETA({
+      const eta = await this.routing.calculateETA({
         pickup: from,
         dropoff: to,
         travelMode: 'driving',
