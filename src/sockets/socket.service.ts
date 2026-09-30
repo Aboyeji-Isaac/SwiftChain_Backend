@@ -13,7 +13,7 @@ import {
   SocketData,
 } from './socket.types';
 import { messageQueueService } from './messageQueue';
-import env from '../config/env';
+import authService from '../services/authService';
 
 /**
  * Interval (ms) between server-initiated ping events.

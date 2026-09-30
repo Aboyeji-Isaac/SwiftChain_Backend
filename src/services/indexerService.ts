@@ -2,7 +2,9 @@ import EventLog from '../models/EventLog';
 import Delivery from '../models/Delivery';
 import { sorobanRpcClient } from '../config/stellar';
 import logger from '../config/logger';
-import { emitDeliveryStatusUpdated } from '../sockets';
+// Issue #212: the live connection handler is the single Socket.IO entry
+// point — the old dedicated `sockets/index.ts` server never ran.
+import { emitDeliveryStatusUpdated } from '../sockets/connectionHandler';
 export interface IndexerStatusData {
   eventType: string;
   contractId: string;

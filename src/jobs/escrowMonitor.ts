@@ -2,7 +2,6 @@ import cron, { ScheduledTask } from 'node-cron';
 import env from '../config/env';
 import logger from '../config/logger';
 import { escrowService } from '../services/escrow.service';
-import env from '../config/env';
 
 /**
  * Cron expression the escrow monitor runs on. Defaults to every 5 minutes.

@@ -1,6 +1,8 @@
 import { Router } from 'express';
 import { authenticate, authorize } from '../middleware/auth';
+import validateRequest from '../middleware/validate';
 import { updateDeliveryStatus } from '../controllers/deliveryStatusController';
+import { updateDeliveryStatusSchema } from '../validators/deliveryValidator';
 
 const router = Router();
 
@@ -10,10 +12,10 @@ const router = Router();
  *   put:
  *     tags: [Delivery Status]
  *     summary: Transition a delivery to its next status
- *     description: >
- *       Restricted to drivers and admins. Enforces a strict state machine:
- *       pending -> assigned -> picked_up -> in_transit -> delivered.
- *       Skipping states or transitioning a delivered delivery is rejected.
+ *     description: >     *     Restricted to drivers and admins. Delegates to the canonical
+ *     DeliveryService state machine (pending -> funded -> assigned ->
+ *     in_progress -> completed / cancelled); legacy vocabulary
+ *     (picked_up/in_transit/delivered) is rejected explicitly.
  *     security:
  *       - bearerAuth: []
  *     parameters:
@@ -48,6 +50,12 @@ const router = Router();
  *       404:
  *         $ref: '#/components/responses/NotFound'
  */
-router.put('/:id/status', authenticate, authorize(['driver', 'admin']), updateDeliveryStatus);
+router.put(
+  '/:id/status',
+  authenticate,
+  authorize(['driver', 'admin']),
+  validateRequest({ body: updateDeliveryStatusSchema }),
+  updateDeliveryStatus,
+);
 
 export default router;

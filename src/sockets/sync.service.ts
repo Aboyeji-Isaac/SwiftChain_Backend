@@ -9,7 +9,6 @@ import {
   LocationSyncAck,
   SyncItemResult,
 } from './socket.types';
-import env from '../config/env';
 
 /**
  * Maximum number of location points accepted in a single sync batch.

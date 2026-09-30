@@ -3,6 +3,9 @@ import env from '../config/env';
 
 const isTest = env.NODE_ENV === 'test' || !!process.env.JEST_WORKER_ID;
 
+/** Rate-limit ceiling used in test environments so suites are never throttled. */
+const TEST_UNLIMITED_MAX = 100_000;
+
 /**
  * Strict rate limiter for authentication endpoints (login, register).
  * Prevents brute-force credential attacks.
