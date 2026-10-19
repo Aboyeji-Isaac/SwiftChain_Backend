@@ -57,7 +57,13 @@ export const updateDeliveryStatus = async (
       return next(new AppError('Invalid status value', 400));
     }
 
-    const delivery = await deliveryService.updateStatus(id, nextStatus as DeliveryStatus);
+    const user = (req as Request & { user?: { _id?: unknown; id?: unknown } }).user;
+    const userId = user?._id ?? user?.id;
+    const actor = userId
+      ? { type: 'user' as const, id: String(userId) }
+      : { type: 'system' as const };
+
+    const delivery = await deliveryService.updateStatus(id, nextStatus as DeliveryStatus, actor);
 
     sendSuccess(res, delivery, 'Delivery status updated successfully');
   } catch (error) {
