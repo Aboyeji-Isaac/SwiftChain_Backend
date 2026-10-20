@@ -5,12 +5,18 @@ import { Socket } from 'socket.io';
  * status change on-chain (see `emitDeliveryStatusUpdated`).
  */
 export interface DeliveryStatusUpdatedPayload {
-  /** Stellar contract id whose event carried the status change. */
-  contractId: string;
+  /** Stellar contract id whose event carried the status change (absent for off-chain milestones). */
+  contractId?: string;
   /** Delivery the status change applies to. */
   deliveryId: string;
   /** New canonical status (see `DeliveryStatus`). */
   status: string;
+  /** Milestone name, present when raised by `emitMilestone`. */
+  event?: string;
+  /** Per-delivery ordering number of the milestone. */
+  seq?: number;
+  /** ISO timestamp the milestone occurred. */
+  occurredAt?: string;
 }
 
 /**

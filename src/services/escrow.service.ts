@@ -12,6 +12,8 @@ import { proofOfDeliveryService } from './proofOfDeliveryService';
 import { sorobanService } from '../blockchain/soroban.service';
 import env from '../config/env';
 import { nowUTC } from '../utils/dateUtils';
+import { deliveryService } from './delivery.service';
+import { MILESTONE_BY_STATUS } from '../models/DeliveryEvent';
 
 /** Data extracted from an on-chain `escrow_funded` contract event. */
 export interface EscrowFundedInput {
@@ -172,10 +174,22 @@ export class EscrowService {
     }
 
     if (delivery.status !== DeliveryStatus.FUNDED) {
+      const previousStatus = delivery.status;
       delivery.status = DeliveryStatus.FUNDED;
       await deliveryRepository.updateById(String(delivery._id), {
         $set: { status: DeliveryStatus.FUNDED },
       });
+
+      // Fire-after-commit: the status write above has landed.
+      await deliveryService.emitMilestone(
+        delivery,
+        {
+          name: MILESTONE_BY_STATUS[DeliveryStatus.FUNDED],
+          fromStatus: previousStatus,
+          payload: { contractId: input.contractId, transactionHash: input.transactionHash },
+        },
+        { type: 'system' },
+      );
     }
 
     logger.info(
