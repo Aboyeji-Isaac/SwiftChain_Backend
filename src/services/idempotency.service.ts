@@ -38,8 +38,21 @@ export class IdempotencyService {
     return `idempotency:${endpoint}:${key}`;
   }
 
+  /**
+   * Whether Redis can be used as the store right now.
+   *
+   * ioredis queues commands issued while the client is still connecting and
+   * retries them for seconds before failing, then keeps reconnecting in the
+   * background. Checking `status` first keeps the documented fallback
+   * ("Redis when available, MongoDB otherwise") immediate, so an unavailable
+   * or not-yet-initialised Redis never stalls an idempotent request.
+   */
+  private isRedisReady(): boolean {
+    return Boolean(redisClient) && redisClient.status === 'ready';
+  }
+
   private async getFromRedis(key: string, endpoint: string): Promise<IdempotencyPayload | null> {
-    if (!redisClient) return null;
+    if (!this.isRedisReady()) return null;
     try {
       const raw = await redisClient.get(this.redisKey(key, endpoint));
       if (!raw) return null;
@@ -55,7 +68,7 @@ export class IdempotencyService {
     endpoint: string,
     payload: IdempotencyPayload,
   ): Promise<boolean> {
-    if (!redisClient) return false;
+    if (!this.isRedisReady()) return false;
     try {
       await redisClient.setex(
         this.redisKey(key, endpoint),
@@ -155,8 +168,8 @@ export class IdempotencyService {
   async markProcessing(key: string, endpoint: string): Promise<void> {
     const payload: IdempotencyPayload = { status: 'processing' };
 
-    // Attempt Redis write first.
-    if (redisClient) {
+    // Attempt Redis write first (only when a connection is actually up).
+    if (this.isRedisReady()) {
       try {
         // NX = only set if key does Not eXist.
         const result = await redisClient.set(
