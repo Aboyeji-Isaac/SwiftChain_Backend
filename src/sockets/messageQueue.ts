@@ -225,11 +225,7 @@ export class MessageQueueService {
    *                  and reconnect flushes share one generation.
    * @returns         Number of messages emitted during this call.
    */
-  public flush<T = unknown>(
-    userId: string,
-    emit: MessageEmitter<T>,
-    owner?: object,
-  ): number {
+  public flush<T = unknown>(userId: string, emit: MessageEmitter<T>, owner?: object): number {
     const normalizedUserId = userId?.trim();
     const queue = normalizedUserId ? this.queues.get(normalizedUserId) : undefined;
 

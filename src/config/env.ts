@@ -129,6 +129,11 @@ interface EnvConfig {
   ESCROW_MONITOR_CRON: string;
   /** Lock TTL (s) after which a still-locked escrow is flagged as expired. Default: 86400 (24h) */
   ESCROW_LOCK_TTL_SECONDS: number;
+  /**
+   * Funding window (s): how long a delivery with a configured escrow amount
+   * has to be funded before it is auto-cancelled. Default: 86400 (24h)
+   */
+  ESCROW_FUNDING_WINDOW_SECONDS: number;
 
   // ── Stellar / Soroban network ─────────────────────────────────
   /** Target Stellar network. Default: testnet */
@@ -327,6 +332,7 @@ const envSchema = z.object({
   SHUTDOWN_TIMEOUT_MS: z.coerce.number().int().min(1000).default(30000),
   ESCROW_MONITOR_CRON: z.string().trim().min(1).default('*/5 * * * *'),
   ESCROW_LOCK_TTL_SECONDS: z.coerce.number().int().min(1).default(86400),
+  ESCROW_FUNDING_WINDOW_SECONDS: z.coerce.number().int().min(1).default(86400),
 
   // ── Stellar / Soroban network ─────────────────────────────────
   STELLAR_NETWORK: z
