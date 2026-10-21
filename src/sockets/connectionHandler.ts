@@ -15,8 +15,20 @@ import {
   SocketData,
   TypedSocket,
   DeliveryStatusUpdatedPayload,
+  ChatMessagePayload,
+  TypingPayload,
+  ReadReceiptPayload,
 } from './socket.types';
+import { chatMessageService, InvalidChatMessageError } from './chatMessage.service';
 import jwt from 'jsonwebtoken';
+
+const DELIVERY_ROOM_PREFIX = 'delivery:';
+
+const deliveryRoom = (deliveryId: string): string => `${DELIVERY_ROOM_PREFIX}${deliveryId}`;
+
+/** The delivery id of a `delivery:<id>` room, or null for any other room. */
+const parseDeliveryRoom = (room: string): string | null =>
+  room.startsWith(DELIVERY_ROOM_PREFIX) ? room.slice(DELIVERY_ROOM_PREFIX.length) : null;
 
 /**
  * The live server instance, captured by {@link initializeSocketServer} and
@@ -117,10 +129,122 @@ export function initializeSocketServer(httpServer: HttpServer): TypedServer {
     });
 
     // ── room join tracking ───────────────────────────────────────────────────
-    socket.on('join_room', (room: string) => {
+    socket.on('join_room', async (room: string) => {
+      if (typeof room !== 'string' || room.trim() === '') return;
+
+      const deliveryId = parseDeliveryRoom(room);
+      if (deliveryId !== null) {
+        try {
+          const allowed = await chatMessageService.canAccessDelivery(
+            socket.data.userId,
+            deliveryId,
+          );
+          if (!allowed) {
+            logger.warn(`[Socket] id=${socket.id} denied join for room="${room}"`);
+            socket.emit('chat_error', {
+              event: 'join_room',
+              message: 'Not a participant of this delivery',
+              deliveryId,
+            });
+            return;
+          }
+        } catch (err) {
+          logger.error(`[Socket] join_room check failed room="${room}": ${(err as Error).message}`);
+          socket.emit('chat_error', {
+            event: 'join_room',
+            message: 'Unable to join room',
+            deliveryId,
+          });
+          return;
+        }
+      }
+
       socket.join(room);
       socketService.trackRoomJoin(socket.id, room);
       logger.info(`[Socket] id=${socket.id} joined room="${room}"`);
+    });
+
+    // ── delivery-scoped chat ─────────────────────────────────────────────────
+    socket.on('message', async (payload: ChatMessagePayload) => {
+      const deliveryId = payload?.deliveryId;
+      const userId = socket.data.userId;
+      if (
+        !userId ||
+        typeof deliveryId !== 'string' ||
+        !socket.rooms.has(deliveryRoom(deliveryId))
+      ) {
+        socket.emit('chat_error', {
+          event: 'message',
+          message: 'Join the delivery room before sending messages',
+          deliveryId,
+        });
+        return;
+      }
+
+      try {
+        const saved = await chatMessageService.createDeliveryMessage(deliveryId, userId, payload);
+        io.to(deliveryRoom(deliveryId)).emit('message', {
+          id: String(saved._id),
+          deliveryId,
+          content: saved.content,
+          sender: { userId, role: saved.senderRole },
+          createdAt: new Date(saved.createdAt).toISOString(),
+        });
+      } catch (err) {
+        const message =
+          err instanceof InvalidChatMessageError ? err.message : 'Failed to send message';
+        if (!(err instanceof InvalidChatMessageError)) {
+          logger.error(`[Socket] message persist failed: ${(err as Error).message}`);
+        }
+        socket.emit('chat_error', { event: 'message', message, deliveryId });
+      }
+    });
+
+    socket.on('typing', (payload: TypingPayload) => {
+      const deliveryId = payload?.deliveryId;
+      const userId = socket.data.userId;
+      if (
+        !userId ||
+        typeof deliveryId !== 'string' ||
+        !socket.rooms.has(deliveryRoom(deliveryId))
+      ) {
+        return;
+      }
+      socket.to(deliveryRoom(deliveryId)).emit('typing', {
+        deliveryId,
+        userId,
+        isTyping: Boolean(payload.isTyping),
+      });
+    });
+
+    socket.on('read_receipt', async (payload: ReadReceiptPayload) => {
+      const deliveryId = payload?.deliveryId;
+      const userId = socket.data.userId;
+      if (
+        !userId ||
+        typeof deliveryId !== 'string' ||
+        !socket.rooms.has(deliveryRoom(deliveryId))
+      ) {
+        return;
+      }
+      try {
+        const messageIds = await chatMessageService.markRead(
+          deliveryId,
+          payload.messageIds,
+          userId,
+        );
+        if (messageIds.length === 0) return;
+        socket.to(deliveryRoom(deliveryId)).emit('read_receipt', {
+          deliveryId,
+          userId,
+          messageIds,
+          readAt: new Date().toISOString(),
+        });
+      } catch (err) {
+        const message =
+          err instanceof InvalidChatMessageError ? err.message : 'Failed to record read receipt';
+        socket.emit('chat_error', { event: 'read_receipt', message, deliveryId });
+      }
     });
 
     socket.on('message_ack', (messageId: string) => {

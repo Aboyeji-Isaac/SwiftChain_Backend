@@ -1,4 +1,7 @@
-import { Types } from 'mongoose';
+import { FilterQuery, SortOrder, Types } from 'mongoose';
+import AuditLog from '../models/AuditLog';
+import { notificationService } from './notificationService';
+import { webhookService } from './webhookService';
 import { assertSameAsset, validateAsset } from './currencyService';
 import { escrowRepository } from '../repositories/EscrowRepository';
 import { deliveryRepository } from '../repositories/DeliveryRepository';
@@ -56,20 +59,25 @@ export interface ScanExpiredEscrowsResult {
   flaggedEscrows: IEscrow[];
 }
 
-/** Result of one pass of the escrow funding-window lapse scan (issue #247). */
-export interface ScanLapsedFundingWindowsResult {
-  scannedAt: string;
-  cancelledCount: number;
-  cancelledDeliveryIds: string[];
-}
+/** Categories of escrows surfaced to admins for review. */
+export type FlaggedEscrowFilter = 'disputed' | 'expired' | 'suspicious';
 
-/** Input for listing escrows flagged as expired for admin review. */
+export const FLAGGED_ESCROW_FILTERS: readonly FlaggedEscrowFilter[] = [
+  'disputed',
+  'expired',
+  'suspicious',
+];
+
+/** Input for listing escrows flagged for admin review. */
 export interface GetFlaggedEscrowsInput {
   page?: number;
   limit?: number;
+  /** Restrict to one category; all categories when omitted. */
+  type?: FlaggedEscrowFilter;
+  sort?: Record<string, SortOrder>;
 }
 
-/** Paginated result for listing escrows flagged as expired. */
+/** Paginated result for listing flagged escrows. */
 export interface GetFlaggedEscrowsResult {
   escrows: IEscrow[];
   total: number;
@@ -78,12 +86,45 @@ export interface GetFlaggedEscrowsResult {
   totalPages: number;
 }
 
-/** Input for an admin resolving a flagged (expired) escrow. */
+/** Outcomes an admin may choose when resolving a flagged escrow. */
+export enum EscrowResolution {
+  RELEASE_TO_DRIVER = 'release_to_driver',
+  REFUND_TO_PAYER = 'refund_to_payer',
+  KEEP_LOCKED = 'keep_locked',
+}
+
+/** Input for an admin resolving a flagged escrow. */
 export interface ResolveEscrowInput {
   escrowId: string;
   adminId: string;
-  notes: string;
+  resolution: EscrowResolution;
+  reason: string;
 }
+
+/** Admin actions available for an expired escrow. */
+export enum ExpiredEscrowAction {
+  /** Re-lock the funds with a fresh expiry and restore the delivery. */
+  REFUND = 'refund',
+  /** Close out the escrow and cancel the delivery for good. */
+  CANCEL = 'cancel',
+}
+
+export interface RetryExpiredEscrowInput {
+  escrowId: string;
+  adminId: string;
+  action: ExpiredEscrowAction;
+  reason: string;
+}
+
+/** Statuses that can be resolved by an admin. */
+const RESOLVABLE_STATUSES: ReadonlySet<EscrowStatus> = new Set([
+  EscrowStatus.LOCKED,
+  EscrowStatus.DISPUTED,
+  EscrowStatus.EXPIRED,
+]);
+
+/** Statuses the expiry scan transitions to `expired`. */
+const EXPIRABLE_STATUSES: readonly EscrowStatus[] = [EscrowStatus.PENDING, EscrowStatus.LOCKED];
 
 /** Largest page size accepted when listing flagged escrows. */
 const FLAGGED_ESCROWS_MAX_LIMIT = 100;
@@ -386,7 +427,7 @@ export class EscrowService {
     const now = nowUTC();
 
     const expiredCandidates = await Escrow.find({
-      status: EscrowStatus.LOCKED,
+      status: { $in: EXPIRABLE_STATUSES },
       expiresAt: { $lte: now },
     });
 
@@ -410,10 +451,11 @@ export class EscrowService {
     const idsToFlag = expiredCandidates.map((escrow) => escrow._id);
 
     await Escrow.updateMany(
-      { _id: { $in: idsToFlag }, status: EscrowStatus.LOCKED },
+      { _id: { $in: idsToFlag }, status: { $in: EXPIRABLE_STATUSES } },
       {
         $set: {
           status: EscrowStatus.EXPIRED,
+          expiredAt: now,
           flaggedAt: now,
           ...(flaggedLedger !== undefined ? { flaggedLedger } : {}),
         },
@@ -431,6 +473,10 @@ export class EscrowService {
       }`,
     );
 
+    for (const escrow of flaggedEscrows) {
+      await this.cancelDeliveryForExpiredEscrow(escrow);
+    }
+
     return {
       scannedAt: now.toISOString(),
       flaggedCount: flaggedEscrows.length,
@@ -439,18 +485,54 @@ export class EscrowService {
   }
 
   /**
-   * Retrieve a paginated list of expired escrows flagged for admin review,
-   * newest flags first.
+   * Cancel the delivery behind an expired escrow and notify its stakeholders
+   * through the notification and webhook paths. Failures are logged so one
+   * bad delivery never aborts the rest of the scan.
+   */
+  private async cancelDeliveryForExpiredEscrow(escrow: IEscrow): Promise<void> {
+    try {
+      const delivery = await Delivery.findById(escrow.delivery);
+      if (!delivery || delivery.status === DeliveryStatus.COMPLETED) return;
+      if (delivery.status !== DeliveryStatus.CANCELLED) {
+        delivery.status = DeliveryStatus.CANCELLED;
+        await delivery.save();
+      }
+
+      await Promise.allSettled([
+        notificationService.notifyDeliveryTransition(delivery, DeliveryStatus.CANCELLED),
+        webhookService.dispatchDeliveryEvent(delivery, DeliveryStatus.CANCELLED),
+      ]);
+
+      logger.info(
+        `[EscrowMonitor] Delivery ${String(delivery._id)} cancelled for expired escrow ${String(
+          escrow._id,
+        )}`,
+      );
+    } catch (err) {
+      const message = err instanceof Error ? err.message : 'Unknown error';
+      logger.error(
+        `[EscrowMonitor] Failed to cancel delivery for expired escrow ${String(
+          escrow._id,
+        )}: ${message}`,
+      );
+    }
+  }
+
+  /**
+   * Retrieve a paginated list of escrows needing admin review: disputed,
+   * expired, or suspicious (locked past expiry without being scanned yet, or
+   * locked without a recorded payer).
    */
   async getFlaggedEscrows(input: GetFlaggedEscrowsInput): Promise<GetFlaggedEscrowsResult> {
     const page = Math.max(1, input.page ?? 1);
     const limit = Math.min(FLAGGED_ESCROWS_MAX_LIMIT, Math.max(1, input.limit ?? 20));
     const skip = (page - 1) * limit;
 
-    const filter = { status: EscrowStatus.EXPIRED };
+    const filter = this.buildFlaggedFilter(input.type);
+    const sort = input.sort && Object.keys(input.sort).length > 0 ? input.sort : { updatedAt: -1 };
 
     const [escrows, total] = await Promise.all([
-      Escrow.find(filter).sort({ flaggedAt: -1 }).skip(skip).limit(limit),
+      Escrow.find(filter).sort(sort).skip(skip).limit(limit),
       Escrow.countDocuments(filter),
     ]);
 
@@ -463,41 +545,186 @@ export class EscrowService {
     };
   }
 
+  private buildFlaggedFilter(type?: FlaggedEscrowFilter): FilterQuery<IEscrow> {
+    const disputed: FilterQuery<IEscrow> = { status: EscrowStatus.DISPUTED };
+    const expired: FilterQuery<IEscrow> = { status: EscrowStatus.EXPIRED };
+    const suspicious: FilterQuery<IEscrow> = {
+      status: EscrowStatus.LOCKED,
+      $or: [{ expiresAt: { $lte: nowUTC() } }, { payerAddress: { $in: [null, ''] } }],
+    };
+
+    switch (type) {
+      case 'disputed':
+        return disputed;
+      case 'expired':
+        return expired;
+      case 'suspicious':
+        return suspicious;
+      default:
+        return { $or: [disputed, expired, suspicious] };
+    }
+  }
+
   /**
-   * Marks a flagged (expired) escrow as resolved by an administrator.
-   *
-   * Only escrows currently in the `expired` state can be resolved — resolving
-   * an active, released, refunded or already-resolved escrow is a conflict.
-   * The admin id and notes are recorded on the escrow as an audit trail.
+   * Resolve a flagged escrow under a distributed lock: release funds to the
+   * driver, refund the payer, or keep the funds locked with a fresh expiry.
+   * Terminal escrows cannot be resolved. Every resolution is audit-logged.
    */
   async resolveEscrow(input: ResolveEscrowInput): Promise<IEscrow> {
-    const { escrowId, adminId, notes } = input;
+    const { escrowId, adminId, resolution, reason } = input;
 
     if (!Types.ObjectId.isValid(escrowId)) {
       throw new AppError('Invalid escrow ID format.', httpStatus.BAD_REQUEST);
     }
-
-    const escrow = await Escrow.findById(escrowId);
-    if (!escrow) {
-      throw new AppError('Escrow not found.', httpStatus.NOT_FOUND);
+    if (!Object.values(EscrowResolution).includes(resolution)) {
+      throw new AppError('Invalid resolution.', httpStatus.BAD_REQUEST);
     }
 
-    if (escrow.status !== EscrowStatus.EXPIRED) {
-      throw new AppError('Only escrows flagged as expired can be resolved.', httpStatus.CONFLICT);
+    return withLock(`escrow:resolve:${escrowId}`, async () => {
+      const escrow = await Escrow.findById(escrowId);
+      if (!escrow) {
+        throw new AppError('Escrow not found.', httpStatus.NOT_FOUND);
+      }
+      if (!RESOLVABLE_STATUSES.has(escrow.status)) {
+        throw new AppError(
+          `Escrow cannot be resolved from status: ${escrow.status}`,
+          httpStatus.CONFLICT,
+        );
+      }
+
+      const previousStatus = escrow.status;
+      const now = new Date();
+      let deliveryStatus: DeliveryStatus | undefined;
+
+      switch (resolution) {
+        case EscrowResolution.RELEASE_TO_DRIVER:
+          escrow.status = EscrowStatus.RELEASED;
+          escrow.releasedAt = now;
+          deliveryStatus = DeliveryStatus.COMPLETED;
+          break;
+        case EscrowResolution.REFUND_TO_PAYER:
+          escrow.status = EscrowStatus.REFUNDED;
+          escrow.refundedAt = now;
+          deliveryStatus = DeliveryStatus.CANCELLED;
+          break;
+        case EscrowResolution.KEEP_LOCKED:
+          escrow.status = EscrowStatus.LOCKED;
+          escrow.expiresAt = this.computeExpiresAt(now);
+          break;
+      }
+
+      escrow.resolvedAt = now;
+      escrow.resolvedBy = adminId;
+      escrow.resolutionNotes = reason;
+      await escrow.save();
+
+      if (deliveryStatus) {
+        await this.applyDeliveryStatus(escrow, deliveryStatus);
+      }
+
+      await this.writeAuditLog('escrow.resolve', adminId, escrow, reason, {
+        resolution,
+        previousStatus,
+        newStatus: escrow.status,
+      });
+
+      logger.info(
+        `[EscrowService] Admin ${adminId} resolved escrow ${escrowId} ` +
+          `(${previousStatus} -> ${escrow.status}) resolution=${resolution}`,
+      );
+
+      return escrow;
+    });
+  }
+
+  /**
+   * Admin retry path for an expired escrow: re-fund it (re-lock with a fresh
+   * expiry and restore the delivery to FUNDED) or fully cancel it.
+   */
+  async retryExpiredEscrow(input: RetryExpiredEscrowInput): Promise<IEscrow> {
+    const { escrowId, adminId, action, reason } = input;
+
+    if (!Types.ObjectId.isValid(escrowId)) {
+      throw new AppError('Invalid escrow ID format.', httpStatus.BAD_REQUEST);
+    }
+    if (!Object.values(ExpiredEscrowAction).includes(action)) {
+      throw new AppError('Invalid action.', httpStatus.BAD_REQUEST);
     }
 
-    escrow.status = EscrowStatus.RESOLVED;
-    escrow.resolvedAt = new Date();
-    escrow.resolvedBy = adminId;
-    escrow.resolutionNotes = notes;
+    return withLock(`escrow:resolve:${escrowId}`, async () => {
+      const escrow = await Escrow.findById(escrowId);
+      if (!escrow) {
+        throw new AppError('Escrow not found.', httpStatus.NOT_FOUND);
+      }
+      if (escrow.status !== EscrowStatus.EXPIRED) {
+        throw new AppError('Only expired escrows can be retried.', httpStatus.CONFLICT);
+      }
 
-    await escrow.save();
+      const now = new Date();
+      if (action === ExpiredEscrowAction.REFUND) {
+        escrow.status = EscrowStatus.LOCKED;
+        escrow.lockedAt = now;
+        escrow.expiresAt = this.computeExpiresAt(now);
+        escrow.expiredAt = undefined;
+        escrow.flaggedAt = undefined;
+      } else {
+        escrow.status = EscrowStatus.RESOLVED;
+      }
+      escrow.resolvedAt = now;
+      escrow.resolvedBy = adminId;
+      escrow.resolutionNotes = reason;
+      await escrow.save();
 
-    logger.info(
-      `[EscrowMonitor] Admin ${adminId} resolved expired escrow ${escrowId}. Notes: "${notes}"`,
-    );
+      await this.applyDeliveryStatus(
+        escrow,
+        action === ExpiredEscrowAction.REFUND ? DeliveryStatus.FUNDED : DeliveryStatus.CANCELLED,
+      );
 
-    return escrow;
+      await this.writeAuditLog('escrow.expired_retry', adminId, escrow, reason, {
+        action,
+        newStatus: escrow.status,
+      });
+
+      return escrow;
+    });
+  }
+
+  /** Move the escrow's delivery to `status` and notify stakeholders. */
+  private async applyDeliveryStatus(escrow: IEscrow, status: DeliveryStatus): Promise<void> {
+    const delivery = await Delivery.findById(escrow.delivery);
+    if (!delivery || delivery.status === status) return;
+
+    delivery.status = status;
+    await delivery.save();
+
+    await Promise.allSettled([
+      notificationService.notifyDeliveryTransition(delivery, status),
+      webhookService.dispatchDeliveryEvent(delivery, status),
+    ]);
+  }
+
+  private async writeAuditLog(
+    action: string,
+    adminId: string,
+    escrow: IEscrow,
+    reason: string,
+    meta: Record<string, unknown>,
+  ): Promise<void> {
+    try {
+      await AuditLog.create({
+        action,
+        actor: Types.ObjectId.isValid(adminId) ? new Types.ObjectId(adminId) : null,
+        targetType: 'Escrow',
+        targetId: escrow._id,
+        description: reason,
+        meta: { ...meta, deliveryId: String(escrow.delivery) },
+      });
+    } catch (err) {
+      const message = err instanceof Error ? err.message : 'Unknown error';
+      logger.error(
+        `[EscrowService] Failed to write audit log for escrow ${String(escrow._id)}: ${message}`,
+      );
+    }
   }
 
   /**

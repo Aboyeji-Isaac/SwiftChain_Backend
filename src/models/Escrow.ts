@@ -21,6 +21,7 @@ export enum EscrowLockStatus {
   RELEASED = 'released',
   REFUNDED = 'refunded',
   DISPUTED = 'disputed',
+  EXPIRED = 'expired',
 }
 
 /** Escrow states in which funds are actually held by the contract. */
@@ -79,6 +80,8 @@ export interface IEscrow extends Document {
   /** Expiry, flagging and resolution audit fields for the escrow lifecycle. */
   /** Absolute point in time after which the lock is considered stale. */
   expiresAt?: Date;
+  /** When the escrow transitioned to `expired`. */
+  expiredAt?: Date;
   /** When the expiry scan flagged the escrow. */
   flaggedAt?: Date;
   /** Soroban ledger sequence at which the expiry was detected (audit trail). */
@@ -142,6 +145,7 @@ const EscrowSchema = new Schema<IEscrow>(
     lastSyncedLedger: { type: Number, min: 0 },
     disputeReason: { type: String, trim: true },
     expiresAt: { type: Date, index: true },
+    expiredAt: { type: Date },
     flaggedAt: { type: Date },
     flaggedLedger: { type: Number, min: 0 },
     resolvedAt: { type: Date },

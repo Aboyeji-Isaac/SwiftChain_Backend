@@ -6,6 +6,7 @@ import Delivery from '../models/Delivery';
 import { IUser, UserRole, UserStatus } from '../interfaces/IUser';
 import { AppError } from '../utils/AppError';
 import logger from '../config/logger';
+import { profilePictureService } from './profilePicture.service';
 
 // ─── DTOs ──────────────────────────────────────────────────────────────────────
 
@@ -211,6 +212,9 @@ export class UserService {
       await delivery.softDelete(userId);
       deliveriesDeleted++;
     }
+
+    // Remove the stored profile picture; failures are logged, not thrown.
+    await profilePictureService.cleanupForDeletedUser(id);
 
     // Soft-delete the user
     await user.softDelete(userId);

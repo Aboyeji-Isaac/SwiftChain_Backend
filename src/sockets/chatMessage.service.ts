@@ -1,4 +1,8 @@
+import { Types } from 'mongoose';
 import { IChatMessage } from '../models/ChatMessage';
+import Delivery from '../models/Delivery';
+import User from '../models/User';
+import { UserRole } from '../interfaces/IUser';
 import {
   ChatMessageRepository,
   chatMessageRepository,
@@ -105,6 +109,102 @@ export class ChatMessageService {
     const validated = this.validate(payload);
     return this.messages.create(validated as Partial<IChatMessage>);
   }
+
+  /**
+   * Whether `userId` may participate in the chat of `deliveryId`: the sender,
+   * recipient, assigned driver, or staff (admin).
+   */
+  async canAccessDelivery(userId: string | undefined, deliveryId: string): Promise<boolean> {
+    if (!userId || !Types.ObjectId.isValid(deliveryId) || !Types.ObjectId.isValid(userId)) {
+      return false;
+    }
+
+    const [delivery, user] = await Promise.all([
+      Delivery.findById(deliveryId).select('sender recipient driverId userId').lean(),
+      User.findById(userId).select('role').lean(),
+    ]);
+    if (!delivery || !user) return false;
+    if (user.role === UserRole.ADMIN) return true;
+
+    const participants = [delivery.sender, delivery.recipient, delivery.driverId, delivery.userId]
+      .filter((id) => id !== undefined && id !== null)
+      .map(String);
+    return participants.includes(userId);
+  }
+
+  /**
+   * Validate and persist a message scoped to a delivery. The sender is always
+   * the authenticated user, never a client-supplied value.
+   *
+   * @throws {InvalidChatMessageError} If the payload is unusable.
+   */
+  async createDeliveryMessage(
+    deliveryId: string,
+    senderId: string,
+    payload: IncomingChatMessage,
+  ): Promise<IChatMessage> {
+    if (!Types.ObjectId.isValid(deliveryId)) {
+      throw new InvalidChatMessageError('Invalid deliveryId');
+    }
+    const { content } = this.validate({ content: payload?.content });
+    const user = await User.findById(senderId).select('role').lean();
+
+    return this.messages.create({
+      content,
+      sender: senderId,
+      senderRole: user?.role,
+      delivery: new Types.ObjectId(deliveryId),
+      readBy: [senderId],
+    } as Partial<IChatMessage>);
+  }
+
+  /** Paginated chat history for a delivery, oldest first within the page. */
+  async getDeliveryHistory(
+    deliveryId: string,
+    page = 1,
+    limit = DEFAULT_HISTORY_LIMIT,
+  ): Promise<DeliveryChatHistory> {
+    const safePage = Math.max(1, page);
+    const safeLimit = Math.min(MAX_HISTORY_LIMIT, Math.max(1, limit));
+    const [messages, total] = await Promise.all([
+      this.messages.findByDelivery(deliveryId, (safePage - 1) * safeLimit, safeLimit),
+      this.messages.countByDelivery(deliveryId),
+    ]);
+
+    return {
+      messages: messages.reverse(),
+      total,
+      page: safePage,
+      limit: safeLimit,
+      totalPages: Math.ceil(total / safeLimit),
+    };
+  }
+
+  /** Mark messages in a delivery chat as read by `userId`. */
+  async markRead(deliveryId: string, messageIds: unknown, userId: string): Promise<string[]> {
+    if (!Array.isArray(messageIds)) {
+      throw new InvalidChatMessageError('messageIds must be an array');
+    }
+    const ids = messageIds.filter(
+      (id): id is string => typeof id === 'string' && Types.ObjectId.isValid(id),
+    );
+    if (ids.length > 0) {
+      await this.messages.markRead(deliveryId, ids, userId);
+    }
+    return ids;
+  }
+}
+
+/** Default and maximum page sizes for delivery chat history. */
+export const DEFAULT_HISTORY_LIMIT = 50;
+export const MAX_HISTORY_LIMIT = 100;
+
+export interface DeliveryChatHistory {
+  messages: IChatMessage[];
+  total: number;
+  page: number;
+  limit: number;
+  totalPages: number;
 }
 
 export const chatMessageService = new ChatMessageService();
