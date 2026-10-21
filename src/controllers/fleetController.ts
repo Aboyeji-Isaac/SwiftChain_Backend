@@ -13,6 +13,9 @@ import User from '../models/User';
 import { sendSuccess } from '../utils/responseWrapper';
 import { resolveQueryOptions, buildPaginationMeta } from '../middlewares/queryMiddleware';
 
+/** Stellar public-key format required for fleet treasury addresses (docs/fleet.md). */
+const STELLAR_PUBLIC_KEY_PATTERN = /^G[A-Z0-9]{55}$/;
+
 // ─── Request body types ────────────────────────────────────────────────────────
 
 interface CreateFleetBody {
@@ -72,13 +75,26 @@ export const createFleet = async (
       throw new AppError('Treasury address is required.', StatusCodes.BAD_REQUEST);
     }
 
+    const normalizedTreasury = treasuryAddress.trim();
+    if (!STELLAR_PUBLIC_KEY_PATTERN.test(normalizedTreasury)) {
+      throw new AppError(
+        'Treasury address must be a valid Stellar public key.',
+        StatusCodes.BAD_REQUEST,
+      );
+    }
+
     if (!businessMetadata || typeof businessMetadata !== 'object') {
       throw new AppError('Business metadata is required.', StatusCodes.BAD_REQUEST);
     }
 
+    const duplicateName = await Fleet.exists({ ownerId: owner._id, name: name.trim() });
+    if (duplicateName) {
+      throw new AppError('You already have a fleet with this name.', StatusCodes.CONFLICT);
+    }
+
     const fleet = await Fleet.create({
       name: name.trim(),
-      treasuryAddress: (treasuryAddress as string).trim(),
+      treasuryAddress: normalizedTreasury,
       ownerId: owner._id,
       members: [{ userId: owner._id, role: 'admin', joinedAt: new Date() }],
       businessMetadata: {

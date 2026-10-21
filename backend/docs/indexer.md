@@ -806,100 +806,60 @@ This route returns recent persisted indexer-lag alerts.
 
 ---
 
-# Current Poller Status
+# Event Poller
 
-The repository currently contains:
+`src/services/eventPoller.ts` runs the continuous ingestion loop. `startEventPoller()` is called from `src/server.ts` at startup and `stopEventPoller()` from graceful shutdown.
 
-```text
-src/services/eventPoller.ts
-```
+The poller needs `ESCROW_CONTRACT_ID`. When it is unset, the poller logs a warning and does not start.
 
-Its current implementation is a stub:
+## Cycle
 
-```ts
-export const startEventPoller = (): void => {
-  logger.info('Event poller started (stub)');
-};
+Each cycle runs these steps:
 
-export const stopEventPoller = (): void => {
-  logger.info('Event poller stopped (stub)');
-};
-```
+1. Read the `IndexerStatus` checkpoint for `STELLAR_NETWORK` and call `getLatestLedger()`.
+2. Page through `getEvents()` from the ledger after the checkpoint up to the latest ledger. Each page is 100 events, and paging stops at the first empty page.
+3. Record each subscribed event in `EventLog` and dispatch it to its handler.
+4. Advance `IndexerStatus.lastProcessedLedger` to the latest ledger.
 
-Therefore, this file is the explicit replacement point for the planned continuous event-polling implementation.
+A cycle runs every 10 seconds. A cycle that starts while the previous one is still running is skipped. Cycle errors are logged and the next cycle retries.
 
-The current repository should not document `eventPoller.ts` as an active continuous `getEvents()` loop.
+## Subscriptions
 
----
+A subscription maps one contract topic to an `EventLog` type and a handler. The default poller has one subscription:
 
-# Planned `getEvents()` Polling Loop
+| EventLog `eventType` | Topic | Handler |
+|---|---|---|
+| `escrow` | `ESCROW_FUNDED_EVENT_TOPIC` (default `escrow_funded`) | `handleEscrowFundedEvent` |
 
-The intended replacement should follow this shape:
+The `delivery`, `dispute`, `reputation` and `milestone` handlers in `src/indexer/` are not subscribed by the default poller yet. Each needs its own subscription with the topic it listens for.
 
-```text
-startEventPoller()
-       |
-       v
-load last processed checkpoint
-       |
-       v
-calculate next start ledger
-       |
-       v
-Soroban RPC getEvents()
-       |
-       v
-receive event batch
-       |
-       v
-deduplicate
-       |
-       v
-persist / dispatch events
-       |
-       v
-advance processed checkpoint
-       |
-       v
-repeat
-```
+## Semantics
 
-The implementation should preserve the following properties:
+* **Deduplication.** `EventLog` has a unique index on `{transactionHash, eventType}`. A record that is already `processed` or `failed` is skipped. A record left `pending` by an interrupted cycle is processed again, so handlers must be idempotent.
+* **Handler failures.** A handler that throws marks its record `failed` and stores the message in `errorMessage`. The checkpoint still advances, so one bad event does not stall the indexer. A failed record is not polled again. Retrying failed records is not implemented yet.
+* **Checkpoint.** The checkpoint advances only after a cycle completes. An RPC or database error leaves it unchanged, so the next cycle fetches the same ledgers again.
+* **First run.** With no checkpoint, the poller starts at the current ledger. Events from before the first run are not backfilled.
+* **Known limitation.** Deduplication keys on the transaction hash. Two events of the same type in one transaction share one record, so the second is skipped.
+* **Lag.** `monitorService.checkIndexerLag` compares the `IndexerStatus` checkpoint with the network ledger. The poller does not compute lag itself.
 
-* Persisted progress.
-* Safe restart after process failure.
-* Event deduplication.
-* Bounded event processing.
-* Correct ledger advancement.
-* Retry handling for transient RPC failures.
-* Graceful shutdown.
-* No checkpoint advancement past events that have not been successfully processed.
+## Polling Primitive
 
----
-
-# Planned Polling Integration
-
-The existing escrow implementation already demonstrates the Soroban RPC polling primitive:
+The poller uses the same `getEvents()` filter the escrow sync functions use:
 
 ```ts
 await sorobanRpcClient.getEvents({
-  startLedger,
   filters: [
     {
       type: 'contract',
       contractIds: [contractId],
-      topics: [
-        [
-          xdr.ScVal.scvSymbol(eventTopic).toXDR('base64'),
-          '*',
-        ],
-      ],
+      topics: [[xdr.ScVal.scvSymbol(eventTopic).toXDR('base64'), '*']],
     },
   ],
+  startLedger,
 });
 ```
 
-The future generalized poller can use this same Soroban RPC `getEvents()` mechanism while dispatching returned events to the appropriate domain handlers.
+Later pages pass the `cursor` from the previous response in place of `startLedger`.
 
 ---
 
@@ -972,7 +932,7 @@ docs: add webhook, realtime, Stellar, and indexer integration references
 - Add the Webhook API reference covering subscriptions, HMAC-SHA256 signing, secret rotation, delivery attempts, and retries.
 - Add the Socket.IO realtime protocol reference covering authentication, rooms, location events, offline sync, ACKs, and token refresh.
 - Add the Stellar/Soroban integration guide covering network configuration, RPC resilience, circuit breakers, XDR generation, stroop conversion, and tx_bad_seq recovery.
-- Add the indexer reference covering EventLog deduplication, event handlers, ledger checkpoints, lag monitoring, alerts, and the current event-poller replacement point.
+- Add the indexer reference covering EventLog deduplication, event handlers, ledger checkpoints, lag monitoring, alerts, and the event poller (see Event Poller).
 
 ## Issues
 
