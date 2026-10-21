@@ -6,6 +6,7 @@ import Escrow, { EscrowStatus } from '../models/Escrow';
 import { AppError } from '../utils/AppError';
 import logger from '../config/logger';
 import { deliveryRepository } from '../repositories/DeliveryRepository';
+import env from '../config/env';
 import { notificationService } from './notificationService';
 import { webhookService } from './webhookService';
 import { proofOfDeliveryService } from './proofOfDeliveryService';
@@ -47,6 +48,12 @@ export interface CreateDeliveryInput {
   escrowAmount: number;
   escrowAsset?: Asset;
   notes?: string;
+  /**
+   * Optional override of the escrow funding deadline. When omitted and an
+   * escrow amount is configured, `fundBy` defaults to creation time +
+   * `ESCROW_FUNDING_WINDOW_SECONDS` (issue #247).
+   */
+  fundBy?: Date;
 }
 
 export interface UpdateDeliveryInput {
@@ -229,10 +236,23 @@ export class DeliveryService {
       throw new AppError('Delivery with this tracking number already exists', httpStatus.CONFLICT);
     }
 
+    const { fundBy, ...rest } = input;
+    const escrowConfigured =
+      typeof input.escrowAmount === 'number' &&
+      Number.isFinite(input.escrowAmount) &&
+      input.escrowAmount > 0;
+
     const delivery = await deliveryRepository.create({
-      ...input,
+      ...rest,
       deliveryFeeAsset: validateAsset(input.deliveryFeeAsset ?? { code: 'XLM' }),
       escrowAsset: validateAsset(input.escrowAsset ?? { code: 'XLM' }),
+      // Escrow-backed deliveries get a funding deadline so they cannot sit in
+      // FUNDED-pending limbo forever (issue #247).
+      ...(escrowConfigured
+        ? {
+            fundBy: fundBy ?? new Date(Date.now() + env.ESCROW_FUNDING_WINDOW_SECONDS * 1000),
+          }
+        : {}),
     });
     logger.info(`Delivery created: ${delivery.trackingNumber}`);
 

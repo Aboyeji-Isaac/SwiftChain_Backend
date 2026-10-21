@@ -9,6 +9,11 @@ export enum DeliveryMilestone {
   IN_PROGRESS = 'in_progress',
   COMPLETED = 'completed',
   CANCELLED = 'cancelled',
+  /**
+   * Raised (alongside the `cancelled` status milestone) when a delivery is
+   * auto-cancelled because its escrow funding window lapsed — issue #247.
+   */
+  FUNDING_WINDOW_LAPSED = 'funding_window_lapsed',
 }
 
 /** The milestone raised when a delivery enters each status. */

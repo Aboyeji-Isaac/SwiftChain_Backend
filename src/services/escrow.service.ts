@@ -4,7 +4,8 @@ import { escrowRepository } from '../repositories/EscrowRepository';
 import { deliveryRepository } from '../repositories/DeliveryRepository';
 import httpStatus from 'http-status-codes';
 import Escrow, { IEscrow, EscrowStatus } from '../models/Escrow';
-import Delivery, { DeliveryStatus } from '../models/Delivery';
+import Delivery, { DeliveryStatus, IDelivery } from '../models/Delivery';
+import AuditLog from '../models/AuditLog';
 import { AppError } from '../utils/AppError';
 import logger from '../config/logger';
 import { withLock } from '../config/redis';
@@ -13,7 +14,14 @@ import { sorobanService } from '../blockchain/soroban.service';
 import env from '../config/env';
 import { nowUTC } from '../utils/dateUtils';
 import { deliveryService } from './delivery.service';
-import { MILESTONE_BY_STATUS } from '../models/DeliveryEvent';
+import { DeliveryMilestone, MILESTONE_BY_STATUS } from '../models/DeliveryEvent';
+
+/**
+ * Reason stamped on a delivery (and its audit-log entry) when it is
+ * auto-cancelled because its escrow funding window lapsed (issue #247).
+ */
+export const FUNDING_WINDOW_LAPSED_REASON =
+  'Escrow funding window lapsed: the escrow was not funded before the fundBy deadline.';
 
 /** Data extracted from an on-chain `escrow_funded` contract event. */
 export interface EscrowFundedInput {
@@ -46,6 +54,13 @@ export interface ScanExpiredEscrowsResult {
   scannedAt: string;
   flaggedCount: number;
   flaggedEscrows: IEscrow[];
+}
+
+/** Result of one pass of the escrow funding-window lapse scan (issue #247). */
+export interface ScanLapsedFundingWindowsResult {
+  scannedAt: string;
+  cancelledCount: number;
+  cancelledDeliveryIds: string[];
 }
 
 /** Input for listing escrows flagged as expired for admin review. */
@@ -90,6 +105,20 @@ export class EscrowService {
     const delivery = await deliveryRepository.findById(input.deliveryId);
     if (!delivery) {
       throw new AppError('Delivery not found for escrow_funded event', httpStatus.NOT_FOUND);
+    }
+
+    // ── Escrow funding window (issue #247) ────────────────────────────
+    // Policy: a cancelled delivery stays cancelled — a late funding event is
+    // rejected with a clear error rather than resurrecting it. A delivery whose
+    // window has just lapsed is cancelled here (same outcome as the cron scan)
+    // before its funding attempt is rejected, so the limbo state never survives
+    // a fund request even if the monitor tick has not run yet.
+    if (delivery.status === DeliveryStatus.CANCELLED) {
+      throw new AppError(this.fundingRejectedMessage(delivery), httpStatus.CONFLICT);
+    }
+    if (this.isFundingWindowLapsed(delivery)) {
+      await this.cancelLapsedFundingWindow(delivery, FUNDING_WINDOW_LAPSED_REASON);
+      throw new AppError(this.fundingRejectedMessage(delivery), httpStatus.CONFLICT);
     }
 
     const asset = validateAsset({ code: input.asset, issuer: input.assetIssuer });
@@ -469,6 +498,192 @@ export class EscrowService {
     );
 
     return escrow;
+  }
+
+  /**
+   * True when a delivery still carries an escrow amount whose `fundBy`
+   * deadline has passed while the delivery is unfunded (`pending`).
+   */
+  private isFundingWindowLapsed(delivery: IDelivery): boolean {
+    return (
+      delivery.status === DeliveryStatus.PENDING &&
+      delivery.fundBy instanceof Date &&
+      delivery.fundBy.getTime() <= Date.now()
+    );
+  }
+
+  /**
+   * The rejection a customer sees when they try to fund a delivery whose
+   * funding window has lapsed (i.e. a cancelled delivery).
+   */
+  private fundingRejectedMessage(delivery: IDelivery): string {
+    const reason = delivery.cancellationReason ?? FUNDING_WINDOW_LAPSED_REASON;
+    const deadline = delivery.fundBy
+      ? ` The funding window closed at ${delivery.fundBy.toISOString()}.`
+      : '';
+    return `Delivery ${String(
+      delivery._id,
+    )} is cancelled and can no longer be funded: ${reason}${deadline} Create a new delivery to fund it.`;
+  }
+
+  /**
+   * Cancel a delivery whose escrow funding window lapsed (issue #247).
+   *
+   * The transition is applied with a conditional update that asserts the
+   * current status, so a concurrent fund/cancel can never double-cancel the
+   * same delivery — the loser matches no document and is left untouched.
+   *
+   * On success the delivery is moved to `CANCELLED` with `cancellationReason`,
+   * an audit-log entry is written, and the `funding_window_lapsed` milestone is
+   * raised — the milestone fan-out notifies the customer (via the `cancelled`
+   * status event) and reaches webhooks and sockets.
+   *
+   * Never throws: a failed audit write or milestone fan-out is logged and
+   * isolated so the cancellation itself always stands (mirrors the
+   * fire-after-commit behaviour of {@link deliveryService.emitMilestone}).
+   *
+   * @returns The cancelled delivery, or the input unchanged when it is no
+   *          longer cancellable (already cancelled / no window / not pending).
+   */
+  async cancelLapsedFundingWindow(
+    delivery: IDelivery,
+    reason: string = FUNDING_WINDOW_LAPSED_REASON,
+  ): Promise<IDelivery> {
+    if (!this.isFundingWindowLapsed(delivery)) {
+      return delivery;
+    }
+
+    const previousStatus = delivery.status;
+    const fundBy = delivery.fundBy as Date;
+    const updated = await deliveryRepository.updateOne(
+      { _id: delivery._id, status: previousStatus },
+      {
+        $set: {
+          status: DeliveryStatus.CANCELLED,
+          cancellationReason: reason,
+        },
+      },
+      { runValidators: true },
+    );
+
+    if (!updated) {
+      // A concurrent transition (e.g. the funding event won the race) matched
+      // no document — leave the delivery exactly as it now stands.
+      logger.warn(
+        `[EscrowService] Funding-window cancellation skipped — delivery=${String(
+          delivery._id,
+        )} changed concurrently.`,
+      );
+      return delivery;
+    }
+
+    await this.recordFundingWindowAudit(updated, reason, previousStatus, fundBy);
+
+    // Fire-after-commit: the status write above has landed.
+    await deliveryService.emitMilestone(
+      updated,
+      {
+        name: DeliveryMilestone.FUNDING_WINDOW_LAPSED,
+        fromStatus: previousStatus,
+        payload: {
+          reason,
+          fundBy: fundBy.toISOString(),
+          fundingWindowSeconds: env.ESCROW_FUNDING_WINDOW_SECONDS,
+          escrowAmount: updated.escrowAmount ?? null,
+        },
+      },
+      { type: 'system' },
+    );
+
+    logger.info(
+      `[EscrowService] Funding window lapsed — delivery=${String(updated._id)} ` +
+        `tracking=${updated.trackingNumber ?? 'n/a'} fundBy=${fundBy.toISOString()}`,
+    );
+
+    return updated;
+  }
+
+  /**
+   * Scan for deliveries whose escrow funding window has lapsed and cancel
+   * them. Called on the same recurring schedule as the escrow-expiry scan.
+   *
+   * Only unfunded (`pending`), non-archived deliveries with a `fundBy` in the
+   * past are candidates; each cancellation is isolated so one failure cannot
+   * stall the rest of the batch.
+   */
+  async scanLapsedFundingWindows(): Promise<ScanLapsedFundingWindowsResult> {
+    const now = nowUTC();
+
+    const lapsed = await Delivery.find({
+      status: DeliveryStatus.PENDING,
+      fundBy: { $lte: now },
+      isDeleted: { $ne: true },
+    }).sort({ fundBy: 1 });
+
+    const cancelledDeliveryIds: string[] = [];
+
+    for (const delivery of lapsed) {
+      try {
+        const cancelled = await this.cancelLapsedFundingWindow(delivery);
+        if (cancelled.status === DeliveryStatus.CANCELLED) {
+          cancelledDeliveryIds.push(String(cancelled._id));
+        }
+      } catch (err) {
+        const message = err instanceof Error ? err.message : 'Unknown error';
+        logger.error(
+          `[EscrowService] Failed to cancel delivery=${String(delivery._id)} ` +
+            `after a funding-window lapse: ${message}`,
+        );
+      }
+    }
+
+    if (cancelledDeliveryIds.length > 0) {
+      logger.info(
+        `[EscrowService] Funding-window scan cancelled ${cancelledDeliveryIds.length} unfunded delivery(ies).`,
+      );
+    }
+
+    return {
+      scannedAt: now.toISOString(),
+      cancelledCount: cancelledDeliveryIds.length,
+      cancelledDeliveryIds,
+    };
+  }
+
+  /**
+   * Best-effort audit-log entry for a funding-window cancellation. Failures
+   * are logged and swallowed — the cancellation has already committed and must
+   * not be rolled back by an audit write.
+   */
+  private async recordFundingWindowAudit(
+    delivery: IDelivery,
+    reason: string,
+    previousStatus: DeliveryStatus,
+    fundBy: Date,
+  ): Promise<void> {
+    try {
+      await AuditLog.create({
+        action: 'funding_window_lapsed',
+        targetType: 'delivery',
+        targetId: delivery._id,
+        description: reason,
+        meta: {
+          deliveryId: String(delivery._id),
+          trackingNumber: delivery.trackingNumber ?? null,
+          fromStatus: previousStatus,
+          toStatus: DeliveryStatus.CANCELLED,
+          fundBy: fundBy.toISOString(),
+          escrowAmount: delivery.escrowAmount ?? null,
+        },
+      });
+    } catch (err) {
+      const message = err instanceof Error ? err.message : 'Unknown error';
+      logger.error(
+        `[EscrowService] Failed to write funding-window audit entry for delivery=${String(
+          delivery._id,
+        )}: ${message}`,
+      );
+    }
   }
 
   /**
