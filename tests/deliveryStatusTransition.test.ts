@@ -15,6 +15,7 @@ import Notification, { NotificationStatus } from '../src/models/Notification';
 import NotificationPreference, { NotificationEvent } from '../src/models/NotificationPreference';
 import { DeliveryService } from '../src/services/delivery.service';
 import { notificationService } from '../src/services/notificationService';
+import logger from '../src/config/logger';
 
 jest.mock('../src/config/logger', () => ({
   info: jest.fn(),
@@ -68,7 +69,9 @@ describe('DeliveryService.updateStatus', () => {
       Notification.deleteMany({}),
       NotificationPreference.deleteMany({}),
     ]);
-  });  // ── Permitted transitions ─────────────────────────────────────────────
+  });
+
+  // ── Permitted transitions ─────────────────────────────────────────────
 
   /**
    * Attach valid proof of delivery to a delivery. Completion transitions
@@ -93,7 +96,6 @@ describe('DeliveryService.updateStatus', () => {
       },
     );
   };
-────
 
   describe('permitted transitions', () => {
     it.each([
@@ -251,14 +253,19 @@ describe('DeliveryService.updateStatus', () => {
       notifySpy.mockRejectedValueOnce(new Error('push provider unreachable'));
       const delivery = await createDelivery(DeliveryStatus.ASSIGNED);
 
-      // The rejection propagates, but the status write has already committed:
-      // a delivery must never revert because a push failed.
+      // The milestone fan-out isolates consumer failures (see
+      // DeliveryService.emitMilestone/runConsumer): the push rejection is
+      // logged and swallowed, and the already-committed transition stands.
       await expect(
         service.updateStatus(String(delivery._id), DeliveryStatus.IN_PROGRESS),
-      ).rejects.toThrow(/push provider unreachable/);
+      ).resolves.toMatchObject({ status: DeliveryStatus.IN_PROGRESS });
 
       const stored = await Delivery.findById(delivery._id);
       expect(stored?.status).toBe(DeliveryStatus.IN_PROGRESS);
+
+      expect(logger.error).toHaveBeenCalledWith(
+        expect.stringContaining('Milestone notification consumer failed'),
+      );
     });
 
     it('writes an audit record end to end through the real service', async () => {
