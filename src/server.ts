@@ -12,6 +12,7 @@ import { startEscrowMonitorJob, stopEscrowMonitorJob } from './jobs/escrowMonito
 import { startWebhookRetryJob, stopWebhookRetryJob } from './jobs/webhookRetryJob';
 import { startAutoAssignmentJob, stopAutoAssignmentJob } from './jobs/autoAssignmentJob';
 import { startDriverRatingJob, stopDriverRatingJob } from './jobs/driverRatingJob';
+import { startEventLogRetryJob, stopEventLogRetryJob } from './jobs/eventLogRetryJob';
 import { startEventPoller, stopEventPoller } from './services/eventPoller';
 import { initializeRedis, disconnectRedis } from './config/redis';
 
@@ -52,11 +53,13 @@ if (env.NODE_ENV !== 'test') {
   startAutoAssignmentJob();
   startDriverRatingJob();
   startEventPoller();
+  startEventLogRetryJob();
 }
 
 const gracefulShutdown = (): void => {
   logger.info('Shutting down gracefully...');
   stopEventPoller();
+  stopEventLogRetryJob();
   stopEscrowMonitorJob();
   stopWebhookRetryJob();
   stopAutoAssignmentJob();

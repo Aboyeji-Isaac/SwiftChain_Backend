@@ -194,6 +194,18 @@ interface EnvConfig {
   /** Maximum due attempts processed per retry sweep tick. Default: 50 */
   WEBHOOK_RETRY_BATCH_SIZE: number;
 
+  // ── Indexer event retries ─────────────────────────────────────────
+  /** Retry attempts allowed for a failed EventLog entry before it is escalated to the DLQ. Default: 5 */
+  EVENTLOG_RETRY_MAX_ATTEMPTS: number;
+  /** Base delay (ms) for EventLog retry exponential backoff. Default: 60000 */
+  EVENTLOG_RETRY_BASE_MS: number;
+  /** Maximum delay (ms) cap for EventLog retry exponential backoff. Default: 3600000 */
+  EVENTLOG_RETRY_MAX_MS: number;
+  /** Cron expression driving the EventLog retry sweep. Default: every minute */
+  EVENTLOG_RETRY_CRON: string;
+  /** Maximum due entries retried per sweep tick. Default: 25 */
+  EVENTLOG_RETRY_BATCH_SIZE: number;
+
   // ── Driver assignment ────────────────────────────────────────────
   /** Number of times the search radius doubles before giving up. Default: 3 */
   ASSIGNMENT_RADIUS_EXPANSION_STEPS: number;
@@ -381,6 +393,13 @@ const envSchema = z.object({
   WEBHOOK_RETRY_CRON: z.string().trim().min(1).default('* * * * *'),
   WEBHOOK_RETRY_BATCH_SIZE: z.coerce.number().int().min(1).max(500).default(50),
 
+  // ── Indexer event retries ─────────────────────────────────────────
+  EVENTLOG_RETRY_MAX_ATTEMPTS: z.coerce.number().int().min(1).max(20).default(5),
+  EVENTLOG_RETRY_BASE_MS: z.coerce.number().int().min(1000).default(60000),
+  EVENTLOG_RETRY_MAX_MS: z.coerce.number().int().min(1000).default(3600000),
+  EVENTLOG_RETRY_CRON: z.string().trim().min(1).default('* * * * *'),
+  EVENTLOG_RETRY_BATCH_SIZE: z.coerce.number().int().min(1).max(500).default(25),
+
   // ── Driver assignment ────────────────────────────────────────────
   ASSIGNMENT_RADIUS_EXPANSION_STEPS: z.coerce.number().int().min(0).max(10).default(3),
   AUTO_ASSIGNMENT_CRON: z.string().trim().min(1).default('* * * * *'),
@@ -429,6 +448,11 @@ if (env.SOROBAN_RPC_RETRY_BASE_MS > env.SOROBAN_RPC_RETRY_MAX_MS) {
 
 if (env.WEBHOOK_RETRY_BASE_MS > env.WEBHOOK_RETRY_MAX_MS) {
   console.error('❌ WEBHOOK_RETRY_BASE_MS cannot exceed WEBHOOK_RETRY_MAX_MS');
+  process.exit(1);
+}
+
+if (env.EVENTLOG_RETRY_BASE_MS > env.EVENTLOG_RETRY_MAX_MS) {
+  console.error('❌ EVENTLOG_RETRY_BASE_MS cannot exceed EVENTLOG_RETRY_MAX_MS');
   process.exit(1);
 }
 

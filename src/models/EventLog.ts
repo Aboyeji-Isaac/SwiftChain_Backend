@@ -9,6 +9,14 @@ export interface IEventLog extends Document {
   processedAt: Date | null;
   status: 'pending' | 'processed' | 'failed';
   errorMessage?: string | null;
+  /** Retry attempts made after the initial failure (manual and scheduled). */
+  retries: number;
+  /** Error from the most recent failed attempt, initial or retry. */
+  lastError?: string | null;
+  /** When the retry job may next pick this entry up; null when none is scheduled. */
+  nextRetryAt?: Date | null;
+  /** Set once retries are exhausted and the entry is escalated to the DLQ. */
+  deadLetteredAt?: Date | null;
   createdAt: Date;
   updatedAt: Date;
 }
@@ -66,6 +74,24 @@ const EventLogSchema = new Schema<IEventLog, IEventLogModel>(
       trim: true,
       default: null,
     },
+    retries: {
+      type: Number,
+      default: 0,
+      min: [0, 'Retries cannot be negative'],
+    },
+    lastError: {
+      type: String,
+      trim: true,
+      default: null,
+    },
+    nextRetryAt: {
+      type: Date,
+      default: null,
+    },
+    deadLetteredAt: {
+      type: Date,
+      default: null,
+    },
   },
   {
     timestamps: true,
@@ -85,6 +111,9 @@ EventLogSchema.index({ transactionHash: 1, eventType: 1 }, { unique: true });
 
 // Index for efficient querying of unprocessed events
 EventLogSchema.index({ status: 1, createdAt: 1 });
+
+// Index for the retry job: failed entries whose backoff window has elapsed
+EventLogSchema.index({ status: 1, nextRetryAt: 1 });
 
 // Index for ledger sequence range queries
 EventLogSchema.index({ ledgerSequence: 1, eventType: 1 });
