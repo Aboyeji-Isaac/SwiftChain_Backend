@@ -68,7 +68,7 @@ describe('DeliveryService.updateStatus', () => {
       Notification.deleteMany({}),
       NotificationPreference.deleteMany({}),
     ]);
-  });  // ── Permitted transitions ─────────────────────────────────────────────
+  }); // ── Permitted transitions ─────────────────────────────────────────────
 
   /**
    * Attach valid proof of delivery to a delivery. Completion transitions
@@ -93,7 +93,6 @@ describe('DeliveryService.updateStatus', () => {
       },
     );
   };
-────
 
   describe('permitted transitions', () => {
     it.each([
