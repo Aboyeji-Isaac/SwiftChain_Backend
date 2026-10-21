@@ -32,7 +32,7 @@ const router = Router();
 router.post(
   '/fee-estimate',
   authenticate,
-  validate({ body: estimateFeeSchema }),
+  validateRequest({ body: estimateFeeSchema }),
   pricingController.estimate.bind(pricingController),
 );
 
