@@ -36,7 +36,7 @@ function makeEvent(
       nativeToScVal('delivery-placeholder', { type: 'string' }),
     ],
     value: nativeToScVal(
-      { amount: BigInt(1000), asset: 'USDC', funded_by: 'GABCDEFGH' },
+      { amount: BigInt(1000), asset: 'XLM', funded_by: 'GABCDEFGH' },
       { type: 'instance' },
     ),
     ...overrides,
@@ -58,7 +58,7 @@ describe('parseEscrowFundedEvent', () => {
     expect(parsed).not.toBeNull();
     expect(parsed?.deliveryId).toBe(deliveryId);
     expect(parsed?.amount).toBe(1000);
-    expect(parsed?.asset).toBe('USDC');
+    expect(parsed?.asset).toBe('XLM');
     expect(parsed?.fundedBy).toBe('GABCDEFGH');
   });
 
@@ -70,7 +70,7 @@ describe('parseEscrowFundedEvent', () => {
 
   it('returns null when the data map is missing required fields', () => {
     const event = makeEvent({
-      value: nativeToScVal({ asset: 'USDC' }, { type: 'instance' }),
+      value: nativeToScVal({ asset: 'XLM' }, { type: 'instance' }),
     });
 
     expect(parseEscrowFundedEvent(event)).toBeNull();

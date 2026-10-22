@@ -24,7 +24,7 @@ export const resolveDisputeSchema = z.object({
     .trim()
     .min(10, 'resolutionNotes must be at least 10 characters')
     .max(2000, 'resolutionNotes must be at most 2000 characters'),
-  resolvedBy: z.string({ error: 'resolvedBy is required' }).trim().min(1, 'resolvedBy is required'),
+  resolvedBy: z.string({ error: 'resolvedBy is required' }).trim().min(1).optional(),
 });
 
 export const addEvidenceSchema = z.object({

@@ -1,6 +1,13 @@
 import http from 'k6/http';
 import { check, sleep } from 'k6';
-import { API_PREFIX, drivers, customers, SHARED_PASSWORD, defaultThresholds, defaultStages } from '../lib/config.js';
+import {
+  API_PREFIX,
+  drivers,
+  customers,
+  SHARED_PASSWORD,
+  defaultThresholds,
+  defaultStages,
+} from '../lib/config.js';
 import { login } from '../lib/authClient.js';
 
 /**

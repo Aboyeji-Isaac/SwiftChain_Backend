@@ -5,24 +5,38 @@
 
 import request from 'supertest';
 import mongoose from 'mongoose';
+import jwt from 'jsonwebtoken';
+import { MongoMemoryServer } from 'mongodb-memory-server';
 import app from '../../src/app';
 import Delivery, { DeliveryStatus } from '../../src/models/Delivery';
+import User from '../../src/models/User';
+import env from '../../src/config/env';
 import { generateQrToken, verifyQrToken } from '../../src/utils/qrToken';
 
-const MONGO_URI = process.env.MONGODB_URI_TEST ?? process.env.MONGODB_URI ?? '';
-
+let mongoServer: MongoMemoryServer | null = null;
 let authToken: string;
 let testDeliveryId: string;
 
 beforeAll(async () => {
-  await mongoose.connect(MONGO_URI);
+  mongoServer = await MongoMemoryServer.create();
+  if (mongoose.connection.readyState !== 0) {
+    await mongoose.disconnect();
+  }
+  await mongoose.connect(mongoServer.getUri());
 
-  // Get real auth token from login
-  const loginRes = await request(app).post('/api/v1/auth/login').send({
-    email: process.env.TEST_USER_EMAIL,
-    password: process.env.TEST_USER_PASSWORD,
+  const testUser = await User.create({
+    firstName: 'Test',
+    lastName: 'User',
+    email: `qr-user-${Date.now()}@example.com`,
+    password: 'Password123!',
+    role: 'user',
   });
-  authToken = loginRes.body.data?.token || loginRes.body.token;
+
+  authToken = jwt.sign(
+    { userId: testUser._id.toString(), role: 'user' },
+    env.JWT_SECRET || 'test-secret-key-16chars',
+    { expiresIn: '1h' },
+  );
 
   // Find or create a delivery in eligible status (IN_PROGRESS)
   let delivery: Record<string, unknown> | null = await Delivery.findOne({
@@ -60,6 +74,9 @@ beforeAll(async () => {
 
 afterAll(async () => {
   await mongoose.connection.close();
+  if (mongoServer) {
+    await mongoServer.stop();
+  }
 });
 
 describe('GET /api/v1/deliveries/:id/qrcode', () => {
@@ -133,7 +150,7 @@ describe('GET /api/v1/deliveries/:id/qrcode', () => {
       .set('Authorization', `Bearer ${authToken}`);
 
     expect(res.status).toBe(400);
-    expect(res.body.data.message || res.body.message).toContain('not eligible for handoff');
+    expect(res.body.data?.message || res.body.message).toContain('not eligible for handoff');
   });
 });
 
@@ -165,9 +182,18 @@ describe('generateQrToken / verifyQrToken utilities', () => {
 
   it('uses timingSafeEqual for signature comparison', () => {
     const token = generateQrToken(testDeliveryId);
-    // Tamper with the token
-    const tampered = token.slice(0, -5) + 'XXXXX';
+    // Tamper with the signature in the JSON payload so JSON parsing succeeds but signature check fails
+    const decoded = JSON.parse(Buffer.from(token, 'base64url').toString('utf-8'));
+    decoded.signature = 'a'.repeat(decoded.signature.length);
+    const tampered = Buffer.from(JSON.stringify(decoded)).toString('base64url');
     // Should throw error due to signature mismatch
     expect(() => verifyQrToken(tampered)).toThrow('Invalid QR token signature');
+  });
+
+  afterAll(async () => {
+    await mongoose.disconnect();
+    if (mongoServer) {
+      await mongoServer.stop();
+    }
   });
 });

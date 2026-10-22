@@ -48,7 +48,14 @@ class DeliveryService {
       throw new Error(`Delivery with ID ${request.deliveryId} not found`);
     }
 
-    if (!delivery.pickupCoordinates || !delivery.dropoffCoordinates) {
+    if (
+      !delivery.pickupCoordinates ||
+      !delivery.dropoffCoordinates ||
+      delivery.pickupCoordinates.lat == null ||
+      delivery.pickupCoordinates.lng == null ||
+      delivery.dropoffCoordinates.lat == null ||
+      delivery.dropoffCoordinates.lng == null
+    ) {
       throw new Error('Delivery does not have complete coordinates');
     }
 

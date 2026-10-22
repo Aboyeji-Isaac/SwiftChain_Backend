@@ -135,7 +135,7 @@ describe('Auth flow: register -> login -> authorized access', () => {
       .send({ status: 'assigned' });
 
     expect(statusRes.status).toBe(403);
-    expect(statusRes.body.status).toBe('error');
+    expect(statusRes.body.success).toBe(false);
   });
 
   it('rejects a tampered token on a protected route', async () => {
@@ -165,6 +165,6 @@ describe('Auth flow: register -> login -> authorized access', () => {
       .send({ status: 'assigned' });
 
     expect(res.status).toBe(401);
-    expect(res.body.message).toMatch(/authorization header missing or malformed/i);
+    expect(res.body.message).toMatch(/Authentication required/i);
   });
 });

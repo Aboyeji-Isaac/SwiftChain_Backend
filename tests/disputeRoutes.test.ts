@@ -8,7 +8,7 @@ import jwt from 'jsonwebtoken';
 import { MongoMemoryServer } from 'mongodb-memory-server';
 import app from '../src/app';
 import User from '../src/models/User';
-import { Dispute, DisputeStatus } from '../src/models/Dispute';
+import { Dispute, DisputeReason, DisputeStatus } from '../src/models/Dispute';
 import { UserRole, UserStatus } from '../src/interfaces/IUser';
 
 jest.mock('../src/config/database', () => ({
@@ -81,6 +81,9 @@ describe('GET /api/v1/disputes', () => {
       disputeId: 'dispute-1',
       deliveryId: 'delivery-1',
       openedBy: 'GABC',
+      raisedBy: admin._id.toString(),
+      reason: DisputeReason.DAMAGED_PACKAGE,
+      description: 'Damaged item',
       status: DisputeStatus.OPEN,
       openedLedger: 10,
     });
@@ -99,9 +102,10 @@ describe('GET /api/v1/disputes/:disputeId', () => {
     process.env.JWT_SECRET = JWT_SECRET;
     const admin = await createUser(UserRole.ADMIN);
     const token = signToken(admin._id.toString());
+    const fakeId = new mongoose.Types.ObjectId().toHexString();
 
     const res = await request(app)
-      .get('/api/v1/disputes/does-not-exist')
+      .get(`/api/v1/disputes/${fakeId}`)
       .set('Authorization', `Bearer ${token}`);
 
     expect(res.status).toBe(404);
@@ -112,16 +116,19 @@ describe('GET /api/v1/disputes/:disputeId', () => {
     const admin = await createUser(UserRole.ADMIN);
     const token = signToken(admin._id.toString());
 
-    await Dispute.create({
+    const created = await Dispute.create({
       disputeId: 'dispute-2',
       deliveryId: 'delivery-2',
       openedBy: 'GABC',
+      raisedBy: admin._id.toString(),
+      reason: DisputeReason.DAMAGED_PACKAGE,
+      description: 'Damaged item 2',
       status: DisputeStatus.OPEN,
       openedLedger: 10,
     });
 
     const res = await request(app)
-      .get('/api/v1/disputes/dispute-2')
+      .get(`/api/v1/disputes/${created._id}`)
       .set('Authorization', `Bearer ${token}`);
 
     expect(res.status).toBe(200);

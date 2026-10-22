@@ -147,6 +147,7 @@ function setupTokenExpirationCheck(io: TypedServer, socket: TypedSocket): void {
 
   let graceTimer: NodeJS.Timeout | null = null;
   let checkInterval: NodeJS.Timeout | null = null;
+  let initialTimeout: NodeJS.Timeout | null = null;
 
   const clearGraceTimer = (): void => {
     if (graceTimer) {
@@ -171,6 +172,9 @@ function setupTokenExpirationCheck(io: TypedServer, socket: TypedSocket): void {
         socket.disconnect(true);
       }
     }, GRACE_PERIOD_MS);
+    if (graceTimer?.unref) {
+      graceTimer.unref();
+    }
   };
 
   const validateToken = async (): Promise<void> => {
@@ -226,16 +230,26 @@ function setupTokenExpirationCheck(io: TypedServer, socket: TypedSocket): void {
 
   socket.on('disconnect', () => {
     clearGraceTimer();
+    if (initialTimeout) {
+      clearTimeout(initialTimeout);
+      initialTimeout = null;
+    }
     if (checkInterval) {
       clearInterval(checkInterval);
       checkInterval = null;
     }
   });
 
-  setTimeout(() => {
+  initialTimeout = setTimeout(() => {
     validateToken();
     checkInterval = setInterval(validateToken, CHECK_INTERVAL_MS);
+    if (checkInterval?.unref) {
+      checkInterval.unref();
+    }
   }, 5000);
+  if (initialTimeout?.unref) {
+    initialTimeout.unref();
+  }
 }
 
 /**
