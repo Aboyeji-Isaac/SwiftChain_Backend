@@ -28,6 +28,7 @@ import indexerRoutes from './indexer.routes';
 import poolingRoutes from './poolingRoutes';
 import chatRoutes from './chatRoutes';
 import escrowAdminRoutes from './escrowAdminRoutes';
+import onboardingRoutes from './onboardingRoutes';
 
 const router = Router();
 
@@ -58,6 +59,7 @@ router.use('/v1/stellar', stellarRoutes);
 router.use('/v1/transactions', transactionRoutes);
 router.use('/v1/uploads', uploadRoutes);
 router.use('/v1/webhooks', webhookRoutes);
+router.use('/v1/onboarding', onboardingRoutes);
 router.use('/v1/escrow', escrowRoutes);
 router.use('/v1/indexer', escrowIndexerRoutes);
 // Delivery-created contract events are posted by the indexer worker.

@@ -204,6 +204,12 @@ interface EnvConfig {
   /** Cron expression driving the driver-rating sweep. Default: hourly */
   DRIVER_RATING_CRON: string;
 
+  // ── Merchant onboarding ──────────────────────────────────────────
+  /** Seconds a wallet-ownership challenge stays valid. Default: 900 */
+  ONBOARDING_CHALLENGE_TTL_SECONDS: number;
+  /** Rejected wallet proofs allowed before an onboarding locks. Default: 5 */
+  ONBOARDING_MAX_PROOF_ATTEMPTS: number;
+
   // ── Proof of delivery ────────────────────────────────────────────
   /** Maximum accepted proof-of-delivery image size, in MB. Default: 8 */
   PROOF_OF_DELIVERY_MAX_SIZE_MB: number;
@@ -387,6 +393,10 @@ const envSchema = z.object({
 
   // ── Driver rating & penalties ─────────────────────────────────────
   DRIVER_RATING_CRON: z.string().trim().min(1).default('0 * * * *'),
+
+  // ── Merchant onboarding ──────────────────────────────────────────
+  ONBOARDING_CHALLENGE_TTL_SECONDS: z.coerce.number().int().min(60).max(86400).default(900),
+  ONBOARDING_MAX_PROOF_ATTEMPTS: z.coerce.number().int().min(1).max(20).default(5),
 
   // ── Proof of delivery ────────────────────────────────────────────
   PROOF_OF_DELIVERY_MAX_SIZE_MB: z.coerce.number().int().min(1).default(8),

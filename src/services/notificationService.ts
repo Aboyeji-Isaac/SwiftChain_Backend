@@ -59,6 +59,11 @@ const EVENT_COPY: Record<NotificationEvent, { title: string; body: (ref: string)
     title: 'Delivery cancelled',
     body: (ref) => `Delivery ${ref} has been cancelled.`,
   },
+  [NotificationEvent.MERCHANT_ONBOARDED]: {
+    title: 'Welcome to SwiftChain',
+    body: (ref) =>
+      `Onboarding for ${ref} is complete. You can now create escrow-funded deliveries.`,
+  },
 };
 
 /** Payload of a `delivery_status_updated` Soroban event. */
@@ -155,6 +160,25 @@ export class NotificationService {
     );
 
     return results.filter((record): record is INotification => record !== null);
+  }
+
+  /**
+   * Tell a newly onboarded merchant owner their account is active. Like every
+   * dispatch, a push failure is recorded rather than thrown.
+   */
+  async notifyMerchantOnboarded(
+    ownerId: string,
+    fleet: { id: string; name: string },
+  ): Promise<INotification | null> {
+    const event = NotificationEvent.MERCHANT_ONBOARDED;
+    const copy = EVENT_COPY[event];
+    return this.dispatch({
+      userId: ownerId,
+      event,
+      title: copy.title,
+      body: copy.body(fleet.name),
+      data: { event, fleetId: fleet.id },
+    });
   }
 
   /**

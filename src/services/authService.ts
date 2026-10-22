@@ -98,7 +98,7 @@ class AuthService {
   /**
    * Generate a signed JWT token containing the user's ID and role.
    */
-  private generateToken(userId: string, role: string): string {
+  public generateToken(userId: string, role: string): string {
     const secret = env.JWT_SECRET;
 
     if (!secret) {
