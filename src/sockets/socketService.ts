@@ -1,6 +1,7 @@
 import { Namespace, Socket } from 'socket.io';
 import { IChatMessage } from '../models/ChatMessage';
 import logger from '../config/logger';
+import { deliveryRoom } from './location.service';
 import {
   ChatMessageService,
   IncomingChatMessage,
@@ -58,7 +59,12 @@ export class SocketService {
   ): Promise<void> {
     try {
       const message = await this.chat.createMessage(payload);
-      nsp.emit('message', message);
+      if (message.deliveryId && typeof nsp.to === 'function') {
+        const room = deliveryRoom(String(message.deliveryId));
+        nsp.to(room).to(String(message.deliveryId)).emit('message', message);
+      } else {
+        nsp.emit('message', message);
+      }
     } catch (error) {
       if (error instanceof InvalidChatMessageError) {
         logger.warn(`[SocketService] Rejected invalid message: ${error.message}`);

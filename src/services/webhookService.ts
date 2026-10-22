@@ -45,16 +45,20 @@ import logger from '../config/logger';
 
 // ─── DTOs ──────────────────────────────────────────────────────────────────────
 
+export const DEFAULT_WEBHOOK_SCHEMA_VERSION = '1.0';
+
 export interface RegisterWebhookInput {
   merchantId: string;
   url: string;
   events: WebhookEvent[];
+  allowBatch?: boolean;
   description?: string;
 }
 
 export interface UpdateWebhookInput {
   url?: string;
   events?: WebhookEvent[];
+  allowBatch?: boolean;
   isActive?: boolean;
   description?: string;
 }
@@ -63,6 +67,19 @@ export interface UpdateWebhookInput {
 export interface WebhookWithSecret {
   webhook: IWebhookSubscription;
   secret: string;
+}
+
+interface PendingBatchItem {
+  attempt: IWebhookDeliveryAttempt;
+  payload: Record<string, unknown>;
+  event: WebhookEvent;
+  delivery: IDelivery;
+}
+
+interface PendingBatchQueue {
+  webhook: IWebhookSubscription;
+  items: PendingBatchItem[];
+  timer: NodeJS.Timeout | null;
 }
 
 // ─── Status → event mapping ─────────────────────────────────────────────────
@@ -80,6 +97,27 @@ const STATUS_EVENTS: Partial<Record<DeliveryStatus, WebhookEvent>> = {
 // ─── Service ───────────────────────────────────────────────────────────────────
 
 export class WebhookService {
+  private flushWindowMs: number = env.WEBHOOK_BATCH_FLUSH_WINDOW_MS;
+  private pendingBatches: Map<string, PendingBatchQueue> = new Map();
+
+  /** Set the flush window (ms) for grouping batched webhook deliveries. */
+  setFlushWindowMs(ms: number): void {
+    this.flushWindowMs = ms;
+  }
+
+  /** Get the configured flush window (ms). */
+  getFlushWindowMs(): number {
+    return this.flushWindowMs;
+  }
+
+  /** Cancel all pending timers and clear all pending batch queues. */
+  clearPendingBatches(): void {
+    for (const queue of this.pendingBatches.values()) {
+      if (queue.timer) clearTimeout(queue.timer);
+    }
+    this.pendingBatches.clear();
+  }
+
   // ── Registry ────────────────────────────────────────────────────────────
 
   /** Register a new endpoint for a merchant. Generates and returns a one-time secret. */
@@ -98,6 +136,7 @@ export class WebhookService {
       url: input.url,
       secret,
       events: input.events,
+      allowBatch: input.allowBatch ?? false,
       description: input.description,
     });
 
@@ -143,6 +182,7 @@ export class WebhookService {
 
     if (input.url !== undefined) webhook.url = input.url;
     if (input.events !== undefined) webhook.events = input.events;
+    if (input.allowBatch !== undefined) webhook.allowBatch = input.allowBatch;
     if (input.isActive !== undefined) webhook.isActive = input.isActive;
     if (input.description !== undefined) webhook.description = input.description;
 
@@ -211,9 +251,12 @@ export class WebhookService {
       const payload = this.buildPayload(delivery, event, status);
 
       await Promise.all(
-        subscriptions.map((webhook) =>
-          this.createAndSendAttempt(webhook, event, delivery, payload),
-        ),
+        subscriptions.map((webhook) => {
+          if (webhook.allowBatch) {
+            return this.queueBatchedAttempt(webhook, event, delivery, payload);
+          }
+          return this.createAndSendAttempt(webhook, event, delivery, payload);
+        }),
       );
     } catch (error) {
       const message = error instanceof Error ? error.message : 'Unknown error';
@@ -240,6 +283,147 @@ export class WebhookService {
     });
 
     await this.sendAttempt(attempt, webhook);
+  }
+
+  /**
+   * Queue an attempt for batched delivery. A WebhookDeliveryAttempt is created
+   * in PENDING status immediately to preserve per-event tracking, and will be
+   * dispatched along with other events within the flush window.
+   */
+  async queueBatchedAttempt(
+    webhook: IWebhookSubscription,
+    event: WebhookEvent,
+    delivery: IDelivery,
+    payload: Record<string, unknown>,
+  ): Promise<IWebhookDeliveryAttempt> {
+    const attempt = await WebhookDeliveryAttempt.create({
+      webhook: webhook._id,
+      merchantId: webhook.merchantId,
+      event,
+      delivery: delivery._id,
+      payload,
+      status: WebhookDeliveryStatus.PENDING,
+      maxAttempts: env.WEBHOOK_MAX_RETRIES,
+    });
+
+    const webhookId = String(webhook._id);
+    let queue = this.pendingBatches.get(webhookId);
+    if (!queue) {
+      queue = {
+        webhook,
+        items: [],
+        timer: null,
+      };
+      this.pendingBatches.set(webhookId, queue);
+    }
+
+    queue.items.push({ attempt, payload, event, delivery });
+
+    if (!queue.timer) {
+      queue.timer = setTimeout(() => {
+        void this.flushBatch(webhookId);
+      }, this.flushWindowMs);
+    }
+
+    return attempt;
+  }
+
+  /**
+   * Flush and dispatch all buffered events for a given subscription.
+   */
+  async flushBatch(webhookId: string): Promise<void> {
+    const queue = this.pendingBatches.get(webhookId);
+    if (!queue || queue.items.length === 0) return;
+
+    if (queue.timer) {
+      clearTimeout(queue.timer);
+      queue.timer = null;
+    }
+
+    const items = [...queue.items];
+    queue.items = [];
+    this.pendingBatches.delete(webhookId);
+
+    const webhook = queue.webhook;
+    const batchPayload = this.buildBatchPayload(items);
+    const body = JSON.stringify(batchPayload);
+    const signature = this.sign(body, webhook.secret);
+
+    try {
+      const response = await axios.post(webhook.url, batchPayload, {
+        timeout: env.WEBHOOK_REQUEST_TIMEOUT_MS,
+        headers: {
+          'Content-Type': 'application/json',
+          'X-SwiftChain-Event': WebhookEvent.DELIVERY_BATCH,
+          'X-SwiftChain-Batch-Size': String(items.length),
+          'X-SwiftChain-Signature': signature,
+          'X-SwiftChain-Timestamp': new Date().toISOString(),
+        },
+        validateStatus: (statusCode) => statusCode >= 200 && statusCode < 300,
+        transformRequest: [() => body],
+      });
+
+      const now = new Date();
+      await Promise.all(
+        items.map(async (item) => {
+          item.attempt.attempts += 1;
+          item.attempt.status = WebhookDeliveryStatus.SUCCESS;
+          item.attempt.lastAttemptAt = now;
+          item.attempt.lastStatusCode = response.status;
+          item.attempt.lastError = undefined;
+          item.attempt.nextRetryAt = null;
+          await item.attempt.save();
+        }),
+      );
+
+      logger.info(
+        `[WebhookService] Batched delivery successful — webhook=${webhookId} events=${items.length} status=${response.status}`,
+      );
+    } catch (error) {
+      const isAxios =
+        axios.isAxiosError(error) || Boolean((error as { isAxiosError?: boolean })?.isAxiosError);
+      const statusCode = isAxios
+        ? (error as { response?: { status?: number } })?.response?.status
+        : undefined;
+      const message =
+        error instanceof Error
+          ? error.message
+          : (error as { message?: string })?.message ?? 'Unknown error';
+      const now = new Date();
+
+      await Promise.all(
+        items.map(async (item) => {
+          const attemptNumber = item.attempt.attempts + 1;
+          item.attempt.attempts = attemptNumber;
+          item.attempt.lastAttemptAt = now;
+          item.attempt.lastStatusCode = statusCode;
+          item.attempt.lastError = message;
+
+          if (attemptNumber >= item.attempt.maxAttempts) {
+            item.attempt.status = WebhookDeliveryStatus.EXHAUSTED;
+            item.attempt.nextRetryAt = null;
+            logger.warn(
+              `[WebhookService] Exhausted retries for batched event — webhook=${webhookId} event=${item.event}: ${message}`,
+            );
+          } else {
+            item.attempt.status = WebhookDeliveryStatus.FAILED;
+            item.attempt.nextRetryAt = this.computeNextRetry(attemptNumber);
+            logger.warn(
+              `[WebhookService] Batched event delivery failed, will retry — webhook=${webhookId} event=${item.event}: ${message}`,
+            );
+          }
+          await item.attempt.save();
+        }),
+      );
+    }
+  }
+
+  /**
+   * Dispatches all queued batches across all subscriptions immediately.
+   */
+  async flushAllBatches(): Promise<void> {
+    const ids = Array.from(this.pendingBatches.keys());
+    await Promise.all(ids.map((id) => this.flushBatch(id)));
   }
 
   /**
@@ -296,8 +480,15 @@ export class WebhookService {
           `attempt=${attemptNumber} status=${response.status}`,
       );
     } catch (error) {
-      const statusCode = axios.isAxiosError(error) ? error.response?.status : undefined;
-      const message = error instanceof Error ? error.message : 'Unknown error';
+      const isAxios =
+        axios.isAxiosError(error) || Boolean((error as { isAxiosError?: boolean })?.isAxiosError);
+      const statusCode = isAxios
+        ? (error as { response?: { status?: number } })?.response?.status
+        : undefined;
+      const message =
+        error instanceof Error
+          ? error.message
+          : (error as { message?: string })?.message ?? 'Unknown error';
 
       attempt.attempts = attemptNumber;
       attempt.lastAttemptAt = new Date();
@@ -375,15 +566,32 @@ export class WebhookService {
     delivery: IDelivery,
     event: WebhookEvent,
     status: DeliveryStatus,
+    schemaVersion: string = DEFAULT_WEBHOOK_SCHEMA_VERSION,
   ): Record<string, unknown> {
     return {
       event,
+      schemaVersion,
       timestamp: new Date().toISOString(),
       data: {
         deliveryId: String(delivery._id),
         trackingNumber: delivery.trackingNumber,
         status,
         driverId: delivery.driverId,
+      },
+    };
+  }
+
+  private buildBatchPayload(
+    items: PendingBatchItem[],
+    schemaVersion: string = DEFAULT_WEBHOOK_SCHEMA_VERSION,
+  ): Record<string, unknown> {
+    return {
+      event: WebhookEvent.DELIVERY_BATCH,
+      schemaVersion,
+      timestamp: new Date().toISOString(),
+      data: {
+        batchSize: items.length,
+        events: items.map((item) => item.payload),
       },
     };
   }

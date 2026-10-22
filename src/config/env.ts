@@ -190,6 +190,8 @@ interface EnvConfig {
   WEBHOOK_RETRY_CRON: string;
   /** Maximum due attempts processed per retry sweep tick. Default: 50 */
   WEBHOOK_RETRY_BATCH_SIZE: number;
+  /** Flush window (ms) for grouping batched webhook deliveries. Default: 1000 */
+  WEBHOOK_BATCH_FLUSH_WINDOW_MS: number;
 
   // ── Driver assignment ────────────────────────────────────────────
   /** Number of times the search radius doubles before giving up. Default: 3 */
@@ -335,6 +337,7 @@ const envSchema = z.object({
   WEBHOOK_RETRY_MAX_MS: z.coerce.number().int().min(1000).default(3600000),
   WEBHOOK_RETRY_CRON: z.string().trim().min(1).default('* * * * *'),
   WEBHOOK_RETRY_BATCH_SIZE: z.coerce.number().int().min(1).max(500).default(50),
+  WEBHOOK_BATCH_FLUSH_WINDOW_MS: z.coerce.number().int().min(50).default(1000),
 
   // ── Driver assignment ────────────────────────────────────────────
   ASSIGNMENT_RADIUS_EXPANSION_STEPS: z.coerce.number().int().min(0).max(10).default(3),

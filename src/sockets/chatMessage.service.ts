@@ -1,8 +1,10 @@
-import { IChatMessage } from '../models/ChatMessage';
+import { Types } from 'mongoose';
+import { IChatMessage, IReadReceipt } from '../models/ChatMessage';
 import {
   ChatMessageRepository,
   chatMessageRepository,
 } from '../repositories/ChatMessageRepository';
+import Delivery from '../models/Delivery';
 
 /** Number of messages replayed to a client when it connects. */
 export const RECENT_MESSAGE_LIMIT = 10;
@@ -12,14 +14,19 @@ export const MAX_MESSAGE_LENGTH = 2000;
 
 /** An incoming message payload, before validation. */
 export interface IncomingChatMessage {
+  deliveryId?: unknown;
   content?: unknown;
   sender?: unknown;
+  recipients?: unknown;
 }
 
 /** A validated, persistable message. */
 export interface ValidatedChatMessage {
+  deliveryId?: Types.ObjectId;
   content: string;
   sender?: string;
+  recipients?: Types.ObjectId[];
+  readBy?: IReadReceipt[];
 }
 
 /** Raised when an incoming payload fails validation. */
@@ -89,9 +96,34 @@ export class ChatMessageService {
 
     const sender = typeof payload.sender === 'string' ? payload.sender.trim() : undefined;
 
+    let deliveryId: Types.ObjectId | undefined;
+    if (payload.deliveryId !== undefined) {
+      const dIdStr = String(payload.deliveryId).trim();
+      if (!Types.ObjectId.isValid(dIdStr)) {
+        throw new InvalidChatMessageError('deliveryId must be a valid ObjectId');
+      }
+      deliveryId = new Types.ObjectId(dIdStr);
+    }
+
+    let recipients: Types.ObjectId[] | undefined;
+    if (payload.recipients !== undefined) {
+      if (!Array.isArray(payload.recipients)) {
+        throw new InvalidChatMessageError('recipients must be an array of ObjectIds');
+      }
+      recipients = payload.recipients.map((r) => {
+        const str = String(r).trim();
+        if (!Types.ObjectId.isValid(str)) {
+          throw new InvalidChatMessageError('Each recipient must be a valid ObjectId');
+        }
+        return new Types.ObjectId(str);
+      });
+    }
+
     return {
       content,
       ...(sender ? { sender } : {}),
+      ...(deliveryId ? { deliveryId } : {}),
+      ...(recipients ? { recipients } : {}),
     };
   }
 
@@ -103,7 +135,51 @@ export class ChatMessageService {
    */
   async createMessage(payload: IncomingChatMessage): Promise<IChatMessage> {
     const validated = this.validate(payload);
-    return this.messages.create(validated as Partial<IChatMessage>);
+
+    let recipients: Types.ObjectId[] = validated.recipients ?? [];
+    if (validated.deliveryId && recipients.length === 0) {
+      try {
+        const delivery = await Delivery.findById(validated.deliveryId);
+        if (delivery) {
+          const candidateIds = [
+            delivery.sender,
+            delivery.recipient,
+            delivery.driverId,
+            delivery.userId,
+          ].filter(Boolean);
+
+          const senderStr = validated.sender ? String(validated.sender) : '';
+          const uniqueIds = Array.from(
+            new Set(
+              candidateIds
+                .map((id) => String(id))
+                .filter((id) => id !== senderStr && Types.ObjectId.isValid(id)),
+            ),
+          );
+
+          recipients = uniqueIds.map((id) => new Types.ObjectId(id));
+        }
+      } catch {
+        // Fallback to empty if delivery cannot be queried
+      }
+    }
+
+    const readBy: IReadReceipt[] = validated.sender
+      ? [
+          {
+            userId: Types.ObjectId.isValid(validated.sender)
+              ? new Types.ObjectId(validated.sender)
+              : validated.sender,
+            readAt: new Date(),
+          },
+        ]
+      : [];
+
+    return this.messages.create({
+      ...validated,
+      recipients,
+      readBy,
+    } as Partial<IChatMessage>);
   }
 }
 
