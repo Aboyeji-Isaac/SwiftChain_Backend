@@ -1,4 +1,5 @@
 import { Types } from 'mongoose';
+import env from '../config/env';
 import logger from '../config/logger';
 import { LocationUpdate, ILocationUpdate } from '../models/LocationUpdate';
 import { toUTC, nowUTC } from '../utils/dateUtils';
@@ -8,7 +9,6 @@ import {
   LocationSyncAck,
   SyncItemResult,
 } from './socket.types';
-import env from '../config/env';
 
 /**
  * Maximum number of location points accepted in a single sync batch.

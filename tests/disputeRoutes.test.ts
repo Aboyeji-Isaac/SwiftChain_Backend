@@ -88,8 +88,9 @@ describe('GET /api/v1/disputes', () => {
     const res = await request(app).get('/api/v1/disputes').set('Authorization', `Bearer ${token}`);
 
     expect(res.status).toBe(200);
-    expect(res.body.data).toHaveLength(1);
-    expect(res.body.data[0].disputeId).toBe('dispute-1');
+    expect(res.body.data.disputes).toHaveLength(1);
+    expect(res.body.data.disputes[0].disputeId).toBe('dispute-1');
+    expect(res.body.data.meta.totalItems).toBe(1);
   });
 });
 

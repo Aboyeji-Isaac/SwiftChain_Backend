@@ -1,6 +1,6 @@
 import { Router } from 'express';
 import { transactionController } from '../controllers/transactionController';
-import { validateRequest } from '../middlewares/validateRequest';
+import validate from '../middleware/validate';
 import { apiLimiter } from '../middlewares/rateLimiter';
 import {
   escrowLockTransactionSchema,
@@ -26,7 +26,7 @@ const router = Router();
 router.post(
   '/escrow-lock',
   apiLimiter,
-  validateRequest({ body: escrowLockTransactionSchema }),
+  validate({ body: escrowLockTransactionSchema }),
   transactionController.createEscrowLockTransaction.bind(transactionController),
 );
 
@@ -85,7 +85,7 @@ router.post(
 router.post(
   '/submit',
   apiLimiter,
-  validateRequest({ body: submitTransactionSchema }),
+  validate({ body: submitTransactionSchema }),
   transactionController.submitEscrowLockTransaction.bind(transactionController),
 );
 

@@ -64,7 +64,9 @@ export class DeliveryRepository extends BaseRepository<IDelivery> {
 
     return new Set(
       found
-        .map((doc) => (doc as unknown as { trackingNumber?: string }).trackingNumber)
+        // `IDelivery` already declares `trackingNumber?: string`; the guard
+        // narrows the optional field instead of force-casting each document.
+        .map((doc) => doc.trackingNumber)
         .filter((value): value is string => typeof value === 'string'),
     );
   }

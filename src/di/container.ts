@@ -43,8 +43,9 @@ import IdempotencyRecord from '../models/IdempotencyRecord';
 
 // ─── Services ──────────────────────────────────────────────────────────────────
 import authService from '../services/authService';
-import { deliveryService } from '../services/deliveryService';
+import { deliveryService } from '../services/delivery.service';
 import { driverService } from '../services/driverService';
+import { driverRatingService } from '../services/driverRatingService';
 import * as fleetService from '../services/fleetService';
 import { escrowService } from '../services/escrow.service';
 import * as disputeService from '../services/disputeService';
@@ -63,14 +64,16 @@ import * as evidenceService from '../services/evidenceService';
 import { indexerService } from '../services/indexerService';
 import * as monitorService from '../services/monitorService';
 import { idempotencyService } from '../services/idempotency.service';
+import { SdkSorobanRpcClient } from '../services/providers/adapters';
+import { getStorageDriver } from '../services/storage.service';
 
 // ─── Controllers ───────────────────────────────────────────────────────────
 // Import controller singleton instances (already instantiated in their modules)
 import authController from '../controllers/authController';
 import { deliveryController } from '../controllers/delivery.controller';
-import * as deliveryCrudController from '../controllers/deliveryCrudController';
 import * as deliveryStatusController from '../controllers/deliveryStatusController';
 import { driverController } from '../controllers/driverController';
+import { driverRatingController } from '../controllers/driverRatingController';
 import * as fleetController from '../controllers/fleetController';
 import { escrowController } from '../controllers/escrow.controller';
 import * as disputeController from '../controllers/disputeController';
@@ -129,6 +132,7 @@ export function createDIContainer(): AwilixContainer {
     [TOKENS.authService]: asValue(authService),
     [TOKENS.deliveryService]: asValue(deliveryService),
     [TOKENS.driverService]: asValue(driverService),
+    [TOKENS.driverRatingService]: asValue(driverRatingService),
     [TOKENS.fleetService]: asValue(fleetService),
     [TOKENS.escrowService]: asValue(escrowService),
     [TOKENS.disputeService]: asValue(disputeService),
@@ -147,6 +151,11 @@ export function createDIContainer(): AwilixContainer {
     [TOKENS.indexerService]: asValue(indexerService),
     [TOKENS.monitorService]: asValue(monitorService),
     [TOKENS.idempotencyService]: asValue(idempotencyService),
+
+    // ─── External SDK clients behind provider interfaces (issue #222) ─────
+    [TOKENS.routingProvider]: asValue(routingService),
+    [TOKENS.sorobanRpcClient]: asValue(new SdkSorobanRpcClient()),
+    [TOKENS.imagesStorage]: asValue(getStorageDriver()),
   });
 
   // ─── Register Controllers (Singleton) ──────────────────────────────────
@@ -158,9 +167,9 @@ export function createDIContainer(): AwilixContainer {
   container.register({
     [TOKENS.authController]: asValue(authController),
     [TOKENS.deliveryController]: asValue(deliveryController),
-    [TOKENS.deliveryCrudController]: asValue(deliveryCrudController),
     [TOKENS.deliveryStatusController]: asValue(deliveryStatusController),
     [TOKENS.driverController]: asValue(driverController),
+    [TOKENS.driverRatingController]: asValue(driverRatingController),
     [TOKENS.fleetController]: asValue(fleetController),
     [TOKENS.escrowController]: asValue(escrowController),
     [TOKENS.disputeController]: asValue(disputeController),

@@ -1,8 +1,8 @@
+import env from '../config/env';
 import logger from '../config/logger';
 import { getRedisClient } from '../config/redis';
 import { buildEtaCacheKey } from '../utils/etaCacheKey';
 import { Coordinates, ETAResponse, TravelMode } from '../types/routing.types';
-import env from '../config/env';
 
 export interface EtaCacheLookup {
   pickup: Coordinates;

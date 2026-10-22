@@ -333,7 +333,9 @@ export class BulkDeliveryService {
         weight: row.packageweight,
       },
       deliveryFee: row.deliveryfee,
+      deliveryFeeAsset: { code: 'XLM' },
       escrowAmount: row.escrowamount,
+      escrowAsset: { code: 'XLM' },
       ...(row.notes ? { notes: row.notes } : {}),
     } as Partial<IDelivery>;
   }

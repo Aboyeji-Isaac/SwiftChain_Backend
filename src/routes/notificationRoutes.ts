@@ -1,10 +1,10 @@
 import { Router } from 'express';
 import authenticate from '../middleware/authenticate';
-import { validateRequest } from '../middlewares/validateRequest';
+import validate from '../middleware/validate';
+import { buildQueryOptions } from '../middlewares/queryMiddleware';
 import {
   getPreferences,
   listNotifications,
-  listNotificationsSchema,
   registerDevice,
   registerDeviceSchema,
   unregisterDevice,
@@ -26,7 +26,19 @@ router.use(authenticate);
  * @desc    Paginated notification history for the authenticated user
  * @access  Private
  */
-router.get('/', validateRequest({ query: listNotificationsSchema }), listNotifications);
+router.get(
+  '/',
+  buildQueryOptions({
+    sortableFields: ['createdAt'],
+    filterableFields: {
+      status: 'string',
+      event: 'string',
+    },
+    defaultSort: { createdAt: -1 },
+    defaultLimit: 20,
+  }),
+  listNotifications,
+);
 
 /**
  * @route   GET /api/v1/notifications/preferences
@@ -40,20 +52,20 @@ router.get('/preferences', getPreferences);
  * @desc    Enable/disable push and choose which events to receive
  * @access  Private
  */
-router.patch('/preferences', validateRequest({ body: updatePreferencesSchema }), updatePreferences);
+router.patch('/preferences', validate({ body: updatePreferencesSchema }), updatePreferences);
 
 /**
  * @route   POST /api/v1/notifications/devices
  * @desc    Register or refresh a device push token
  * @access  Private
  */
-router.post('/devices', validateRequest({ body: registerDeviceSchema }), registerDevice);
+router.post('/devices', validate({ body: registerDeviceSchema }), registerDevice);
 
 /**
  * @route   DELETE /api/v1/notifications/devices
  * @desc    Remove a device push token
  * @access  Private
  */
-router.delete('/devices', validateRequest({ body: unregisterDeviceSchema }), unregisterDevice);
+router.delete('/devices', validate({ body: unregisterDeviceSchema }), unregisterDevice);
 
 export default router;

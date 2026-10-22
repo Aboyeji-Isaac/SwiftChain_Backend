@@ -1,6 +1,25 @@
 import { Socket } from 'socket.io';
 
 /**
+ * Payload broadcast to a delivery room when the escrow indexer confirms a
+ * status change on-chain (see `emitDeliveryStatusUpdated`).
+ */
+export interface DeliveryStatusUpdatedPayload {
+  /** Stellar contract id whose event carried the status change (absent for off-chain milestones). */
+  contractId?: string;
+  /** Delivery the status change applies to. */
+  deliveryId: string;
+  /** New canonical status (see `DeliveryStatus`). */
+  status: string;
+  /** Milestone name, present when raised by `emitMilestone`. */
+  event?: string;
+  /** Per-delivery ordering number of the milestone. */
+  seq?: number;
+  /** ISO timestamp the milestone occurred. */
+  occurredAt?: string;
+}
+
+/**
  * Metadata stored for each active socket connection.
  */
 export interface SocketConnectionMeta {
@@ -199,6 +218,55 @@ export interface ServerToClientEvents {
   auth_expired: (payload?: AuthExpiredPayload) => void;
   /** Acknowledge a client's token refresh attempt */
   auth_refresh_ack: (payload: AuthRefreshAckPayload) => void;
+  /** Push a chain-confirmed delivery status change to a delivery room. */
+  delivery_status_updated: (payload: DeliveryStatusUpdatedPayload) => void;
+  /** A chat message broadcast to a delivery room. */
+  message: (payload: ChatMessageBroadcast) => void;
+  /** A participant started/stopped typing in a delivery room. */
+  typing: (payload: TypingBroadcast) => void;
+  /** A participant read messages in a delivery room. */
+  read_receipt: (payload: ReadReceiptBroadcast) => void;
+  /** Room join/chat errors (e.g. not a participant of the delivery). */
+  chat_error: (payload: ChatErrorPayload) => void;
+}
+
+/** Client → server chat message, sent to a joined `delivery:<id>` room. */
+export interface ChatMessagePayload {
+  deliveryId: string;
+  content: string;
+}
+
+export interface ChatMessageBroadcast {
+  id: string;
+  deliveryId: string;
+  content: string;
+  sender: { userId: string; role?: string };
+  createdAt: string;
+}
+
+export interface TypingPayload {
+  deliveryId: string;
+  isTyping: boolean;
+}
+
+export interface TypingBroadcast extends TypingPayload {
+  userId: string;
+}
+
+export interface ReadReceiptPayload {
+  deliveryId: string;
+  messageIds: string[];
+}
+
+export interface ReadReceiptBroadcast extends ReadReceiptPayload {
+  userId: string;
+  readAt: string;
+}
+
+export interface ChatErrorPayload {
+  event: string;
+  message: string;
+  deliveryId?: string;
 }
 
 /**
@@ -218,6 +286,12 @@ export interface ClientToServerEvents {
   auth_refresh: (payload: AuthRefreshPayload) => void;
   /** Legacy token-refresh event used by older clients. */
   refresh_token: (payload: RefreshTokenPayload) => void;
+  /** Send a chat message to a joined delivery room. */
+  message: (payload: ChatMessagePayload) => void;
+  /** Typing indicator for a joined delivery room. */
+  typing: (payload: TypingPayload) => void;
+  /** Read receipt for messages in a joined delivery room. */
+  read_receipt: (payload: ReadReceiptPayload) => void;
 }
 
 /**

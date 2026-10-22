@@ -1,4 +1,13 @@
 import { z } from 'zod';
+import { assetSchema, validateAsset } from '../services/currencyService';
+
+const supportedAssetSchema = assetSchema.superRefine((asset, ctx) => {
+  try {
+    validateAsset(asset);
+  } catch {
+    ctx.addIssue({ code: 'custom', message: 'Unsupported asset or issuer' });
+  }
+});
 
 // Location payloads consumed by DeliveryService.create (see
 // src/services/delivery.service.ts CreateDeliveryInput).
@@ -39,7 +48,9 @@ export const createDeliverySchema = z.object({
   dropoff: locationSchema,
   package: packageSchema,
   deliveryFee: z.number().nonnegative().optional(),
+  deliveryFeeAsset: supportedAssetSchema.optional(),
   escrowAmount: z.number().nonnegative().optional(),
+  escrowAsset: supportedAssetSchema.optional(),
   notes: z.string().optional(),
 });
 
@@ -57,8 +68,13 @@ export const updateDeliverySchema = z
   })
   .refine((data) => Object.keys(data).length > 0, { message: 'Request body must not be empty' });
 
+/**
+ * Canonical delivery status vocabulary only (issue #211) — legacy values
+ * (`picked_up`, `in_transit`, `delivered`) are rejected at the validation
+ * boundary and again in the status controller with an explicit message.
+ */
 export const updateDeliveryStatusSchema = z.object({
-  status: z.enum(['pending', 'assigned', 'in_transit', 'delivered', 'cancelled']),
+  status: z.enum(['pending', 'funded', 'assigned', 'in_progress', 'completed', 'cancelled']),
 });
 
 export const assignDriverSchema = z.object({

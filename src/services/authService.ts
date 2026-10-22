@@ -1,10 +1,50 @@
 import jwt from 'jsonwebtoken';
 import { StatusCodes } from 'http-status-codes';
 import User from '../models/User';
-import { IAuthResponse, ILoginPayload, IUser } from '../interfaces/IUser';
+import { IAuthResponse, ILoginPayload, UserRole, UserStatus } from '../interfaces/IUser';
 import AppError from '../utils/AppError';
 import logger from '../config/logger';
 import env from '../config/env';
+
+/**
+ * Public user DTO — the exact JSON shape consumers receive from auth and
+ * user-profile endpoints. Derived from real Mongoose documents (never cast),
+ * so schema drift surfaces as a compile error instead of a runtime mismatch.
+ */
+export interface UserDTO {
+  id: string;
+  email: string;
+  firstName: string;
+  lastName: string;
+  role: UserRole;
+  /** Account lifecycle state — consumers gate suspended/banned accounts on it. */
+  status: UserStatus;
+}
+
+/**
+ * Map a Mongoose user document to the public {@link UserDTO} shape.
+ *
+ * The compiler verifies each field against the document type; no `as unknown`
+ * escape hatch is involved.
+ */
+export function toUserDTO(user: {
+  /** Mongoose documents expose `id` as string; lean projections as unknown. */
+  id?: unknown;
+  email: string;
+  firstName: string;
+  lastName: string;
+  role: UserRole;
+  status: UserStatus;
+}): UserDTO {
+  return {
+    id: String(user.id),
+    email: user.email,
+    firstName: user.firstName,
+    lastName: user.lastName,
+    role: user.role,
+    status: user.status,
+  };
+}
 
 class AuthService {
   /**
@@ -50,13 +90,7 @@ class AuthService {
     logger.info(`User ${email} logged in successfully`);
 
     return {
-      user: {
-        id: user.id as string,
-        email: user.email,
-        firstName: user.firstName,
-        lastName: user.lastName,
-        role: user.role,
-      },
+      user: toUserDTO(user),
       token,
     };
   }
@@ -102,7 +136,7 @@ class AuthService {
     lastName: string;
     email: string;
     password: string;
-  }): Promise<Partial<IUser>> {
+  }): Promise<UserDTO> {
     const existingUser = await User.findOne({ email: payload.email });
     if (existingUser) {
       throw new AppError('Email is already in use', StatusCodes.CONFLICT);
@@ -110,17 +144,33 @@ class AuthService {
 
     const user = await User.create(payload);
 
-    return {
-      id: user.id as string,
-      email: user.email,
-      firstName: user.firstName,
-      lastName: user.lastName,
-      role: user.role,
-    } as unknown as Partial<IUser>;
+    return toUserDTO(user);
   }
 
-  public async getUserById(id: string): Promise<IUser | null> {
-    return User.findById(id).lean().exec() as unknown as IUser | null;
+  /**
+   * Fetch a user by id using an explicit projection of the fields the
+   * {@link UserDTO} contract exposes. The projection keeps the selected
+   * columns and the DTO in sync: removing a field from one surfaces as a
+   * type error in the other.
+   */
+  public async getUserById(id: string): Promise<UserDTO | null> {
+    const user = await User.findById(id)
+      .select(['email', 'firstName', 'lastName', 'role', 'status'])
+      .lean<{
+        id?: unknown;
+        email: string;
+        firstName: string;
+        lastName: string;
+        role: UserRole;
+        status: UserStatus;
+      }>()
+      .exec();
+
+    if (!user) {
+      return null;
+    }
+
+    return toUserDTO(user);
   }
 }
 

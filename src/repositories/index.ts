@@ -22,3 +22,6 @@ export {
 } from './NotificationPreferenceRepository';
 export { NotificationRepository, notificationRepository } from './NotificationRepository';
 export { ChatMessageRepository, chatMessageRepository } from './ChatMessageRepository';
+
+export { DeliveryEventRepository, deliveryEventRepository } from './DeliveryEventRepository';
+export type { AppendDeliveryEventInput } from './DeliveryEventRepository';

@@ -12,6 +12,7 @@ import {
   rotateWebhookSecret,
 } from '../controllers/webhookController';
 import { registerWebhookSchema, updateWebhookSchema } from '../validators/webhookValidator';
+import { buildQueryOptions } from '../middlewares/queryMiddleware';
 
 const router = Router();
 
@@ -25,14 +26,25 @@ router.use(requireRole(UserRole.ENTERPRISE, UserRole.ADMIN));
  * @desc    Register a new endpoint to receive delivery lifecycle callbacks
  * @access  Merchant (enterprise) or admin
  */
-router.post('/', validate(registerWebhookSchema), registerWebhook);
+router.post('/', validate({ body: registerWebhookSchema }), registerWebhook);
 
 /**
  * @route   GET /api/v1/webhooks
  * @desc    List the authenticated merchant's registered webhooks
  * @access  Merchant (enterprise) or admin
  */
-router.get('/', listWebhooks);
+router.get(
+  '/',
+  buildQueryOptions({
+    sortableFields: ['createdAt'],
+    filterableFields: {
+      isActive: 'boolean',
+    },
+    defaultSort: { createdAt: -1 },
+    defaultLimit: 20,
+  }),
+  listWebhooks,
+);
 
 /**
  * @route   GET /api/v1/webhooks/:id
@@ -46,7 +58,7 @@ router.get('/:id', getWebhook);
  * @desc    Update a webhook's URL, subscribed events, or active state
  * @access  Merchant (enterprise) or admin
  */
-router.patch('/:id', validate(updateWebhookSchema), updateWebhook);
+router.patch('/:id', validate({ body: updateWebhookSchema }), updateWebhook);
 
 /**
  * @route   DELETE /api/v1/webhooks/:id

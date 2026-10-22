@@ -14,6 +14,7 @@ export const TOKENS = {
   authService: 'authService',
   deliveryService: 'deliveryService',
   driverService: 'driverService',
+  driverRatingService: 'driverRatingService',
   fleetService: 'fleetService',
   escrowService: 'escrowService',
   disputeService: 'disputeService',
@@ -32,6 +33,11 @@ export const TOKENS = {
   indexerService: 'indexerService',
   monitorService: 'monitorService',
   idempotencyService: 'idempotencyService',
+
+  // External SDK clients behind provider interfaces (issue #222)
+  routingProvider: 'routingProvider',
+  sorobanRpcClient: 'sorobanRpcClient',
+  imagesStorage: 'imagesStorage',
 
   // Models (Mongoose schemas)
   userModel: 'userModel',
@@ -57,9 +63,9 @@ export const TOKENS = {
   // Controllers
   authController: 'authController',
   deliveryController: 'deliveryController',
-  deliveryCrudController: 'deliveryCrudController',
   deliveryStatusController: 'deliveryStatusController',
   driverController: 'driverController',
+  driverRatingController: 'driverRatingController',
   fleetController: 'fleetController',
   escrowController: 'escrowController',
   disputeController: 'disputeController',

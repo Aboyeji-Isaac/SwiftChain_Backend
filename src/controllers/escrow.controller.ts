@@ -35,7 +35,16 @@ export class EscrowController {
 
   async fund(req: Request, res: Response, next: NextFunction): Promise<void> {
     try {
-      const { deliveryId, contractId, transactionHash, amount, asset, fundedBy, ledger } = req.body;
+      const {
+        deliveryId,
+        contractId,
+        transactionHash,
+        amount,
+        asset,
+        assetIssuer,
+        fundedBy,
+        ledger,
+      } = req.body;
 
       logger.info(
         `[EscrowController] Fund request received — delivery=${deliveryId} ` +
@@ -47,6 +56,7 @@ export class EscrowController {
         deliveryId,
         amount,
         asset,
+        assetIssuer,
         fundedBy,
         transactionHash,
         ledger,

@@ -1,10 +1,24 @@
 import { rpc as StellarRpc, scValToNative, xdr } from '@stellar/stellar-sdk';
-import { sorobanRpcClient } from '../config/stellar';
 import { escrowIndexerConfig } from '../config/escrow';
 import { escrowService, EscrowFundedInput } from '../services/escrow.service';
 import { escrowIndexerService } from '../services/escrowIndexerService';
 import { EscrowResolvedEvent } from './types/escrowEvents';
 import logger from '../config/logger';
+import type { ISorobanRpcClient } from '../services/providers/sorobanRpcClient';
+import { defaultSorobanRpcClient } from '../services/providers/adapters';
+
+/**
+ * Soroban RPC client used by the escrow event sync functions.
+ *
+ * Defaults to the shared SDK adapter; tests can swap in a fake via
+ * {@link setEscrowRpcClient} instead of reaching for module mocking.
+ */
+let sorobanRpcClient: ISorobanRpcClient = defaultSorobanRpcClient;
+
+/** Replace the RPC client used by the escrow handlers (test seam). */
+export function setEscrowRpcClient(client: ISorobanRpcClient): void {
+  sorobanRpcClient = client;
+}
 
 /**
  * Native representation of the `escrow_funded` event emitted by the escrow
@@ -18,6 +32,7 @@ export interface EscrowFundedEventData {
   deliveryId: string;
   amount: number;
   asset: string;
+  assetIssuer?: string;
   fundedBy?: string;
 }
 
@@ -68,6 +83,7 @@ export function parseEscrowFundedEvent(
 
     const asset = data?.asset;
     const fundedBy = data?.funded_by;
+    const assetIssuer = data?.asset_issuer;
 
     if (!Number.isFinite(amount) || typeof asset !== 'string') {
       return null;
@@ -77,6 +93,7 @@ export function parseEscrowFundedEvent(
       deliveryId,
       amount,
       asset,
+      assetIssuer: typeof assetIssuer === 'string' ? assetIssuer : undefined,
       fundedBy: typeof fundedBy === 'string' ? fundedBy : undefined,
     };
   } catch (err) {
@@ -108,6 +125,7 @@ export async function handleEscrowFundedEvent(
     deliveryId: parsed.deliveryId,
     amount: parsed.amount,
     asset: parsed.asset,
+    assetIssuer: parsed.assetIssuer,
     fundedBy: parsed.fundedBy,
     transactionHash: event.txHash,
     ledger: event.ledger,

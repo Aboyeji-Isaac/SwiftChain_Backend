@@ -1,6 +1,9 @@
 import { Router } from 'express';
 import authenticate from '../middleware/authenticate';
+import requireRole from '../middleware/requireRole';
 import validate from '../middleware/validate';
+import { UserRole } from '../interfaces/IUser';
+import { buildQueryOptions } from '../middlewares/queryMiddleware';
 import {
   openDispute,
   getDispute,
@@ -23,14 +26,31 @@ const router = Router();
  * @desc    Open a delivery dispute before any on-chain dispute workflow runs
  * @access  Authenticated users (delivery customer or driver)
  */
-router.post('/', authenticate, validate(createDisputeSchema), openDispute);
+router.post('/', authenticate, validate({ body: createDisputeSchema }), openDispute);
 
 /**
  * @route   GET /api/v1/disputes
  * @desc    List disputes with optional filtering
- * @access  Authenticated users
+ * @access  Admin only — the query is not scoped to the caller, so exposing it
+ *          to every authenticated user would leak other users' disputes.
  */
-router.get('/', authenticate, listDisputes);
+router.get(
+  '/',
+  authenticate,
+  requireRole(UserRole.ADMIN),
+  buildQueryOptions({
+    sortableFields: ['createdAt'],
+    filterableFields: {
+      status: 'string',
+      reason: 'string',
+      raisedBy: 'string',
+      deliveryId: 'string',
+    },
+    defaultSort: { createdAt: -1 },
+    defaultLimit: 10,
+  }),
+  listDisputes,
+);
 
 /**
  * @route   GET /api/v1/disputes/:id
@@ -44,7 +64,12 @@ router.get('/:id', authenticate, getDispute);
  * @desc    Add evidence URLs to an open dispute
  * @access  Authenticated users (dispute raiser or driver)
  */
-router.patch('/:id/evidence', authenticate, validate(addEvidenceSchema), addEvidenceController);
+router.patch(
+  '/:id/evidence',
+  authenticate,
+  validate({ body: addEvidenceSchema }),
+  addEvidenceController,
+);
 
 /**
  * @route   PATCH /api/v1/disputes/:id/resolve
@@ -54,7 +79,7 @@ router.patch('/:id/evidence', authenticate, validate(addEvidenceSchema), addEvid
 router.patch(
   '/:id/resolve',
   authenticate,
-  validate(resolveDisputeSchema),
+  validate({ body: resolveDisputeSchema }),
   resolveDisputeController,
 );
 
@@ -63,6 +88,11 @@ router.patch(
  * @desc    Update dispute metadata (reason, description, evidence)
  * @access  Authenticated users (dispute raiser or admin)
  */
-router.patch('/:id', authenticate, validate(updateDisputeSchema), updateDisputeController);
+router.patch(
+  '/:id',
+  authenticate,
+  validate({ body: updateDisputeSchema }),
+  updateDisputeController,
+);
 
 export default router;

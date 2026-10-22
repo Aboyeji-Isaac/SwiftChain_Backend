@@ -1,8 +1,9 @@
 import EventLog from '../models/EventLog';
 import Delivery from '../models/Delivery';
-import { sorobanRpcClient } from '../config/stellar';
 import logger from '../config/logger';
-import { emitDeliveryStatusUpdated } from '../sockets';
+import { emitDeliveryStatusUpdated } from '../sockets/connectionHandler';
+import type { ISorobanRpcClient } from './providers/sorobanRpcClient';
+import { defaultSorobanRpcClient } from './providers/adapters';
 export interface IndexerStatusData {
   eventType: string;
   contractId: string;
@@ -19,9 +20,15 @@ export interface DeliveryStatusUpdatedEvent {
 }
 
 export class IndexerService {
+  private readonly rpcClient: ISorobanRpcClient;
+
+  constructor(rpcClient: ISorobanRpcClient = defaultSorobanRpcClient) {
+    this.rpcClient = rpcClient;
+  }
+
   public async getIndexerStatus(): Promise<IndexerStatusData[]> {
     try {
-      const currentLedgerResponse = await sorobanRpcClient.getLatestLedger();
+      const currentLedgerResponse = await this.rpcClient.getLatestLedger();
       const currentLedger = currentLedgerResponse.sequence;
       const logs = await EventLog.find({}).lean();
       return logs.map((log) => {

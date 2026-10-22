@@ -10,11 +10,12 @@ export class ChatMessageRepository extends BaseRepository<IChatMessage> {
   }
 
   /**
-   * The most recent messages, newest first.
+   * The most recent messages across the whole application, newest first.
    *
-   * Callers that render a transcript reverse the result to get chronological
-   * order; the query itself stays newest-first so it can use the descending
-   * `createdAt` index.
+   * Used on socket connection to replay the transcript. Bounded by `limit`
+   * so a busy room cannot flood memory.
+   *
+   * @param limit - Maximum number of messages to return.
    */
   async findRecent(limit: number): Promise<IChatMessage[]> {
     return this.find({}, { sort: { createdAt: -1 }, limit, lean: true });
@@ -87,12 +88,50 @@ export class ChatMessageRepository extends BaseRepository<IChatMessage> {
     return result.modifiedCount;
   }
 
+  /** A page of a delivery's chat history, newest first. */
+  async findByDelivery(deliveryId: string, skip: number, limit: number): Promise<IChatMessage[]> {
+    const filter = this.buildDeliveryFilter(deliveryId);
+    return ChatMessage.find(filter)
+      .sort({ createdAt: -1 })
+      .skip(skip)
+      .limit(limit)
+      .lean<IChatMessage[]>()
+      .exec();
+  }
+
+  async countByDelivery(deliveryId: string): Promise<number> {
+    const filter = this.buildDeliveryFilter(deliveryId);
+    return ChatMessage.countDocuments(filter).exec();
+  }
+
+  /** Record `userId` as having read the given messages of a delivery. */
+  async markRead(deliveryId: string, messageIds: string[], userId: string): Promise<number> {
+    const userObjId = Types.ObjectId.isValid(userId) ? new Types.ObjectId(userId) : userId;
+    const filter = {
+      _id: {
+        $in: messageIds.map((id) => (Types.ObjectId.isValid(id) ? new Types.ObjectId(id) : id)),
+      },
+      ...this.buildDeliveryFilter(deliveryId),
+      'readBy.userId': { $ne: userObjId },
+    };
+    const result = await ChatMessage.updateMany(filter, {
+      $push: {
+        readBy: {
+          userId: userObjId,
+          readAt: new Date(),
+        },
+      },
+    }).exec();
+    return result.modifiedCount;
+  }
+
   private buildDeliveryFilter(deliveryId: string): FilterQuery<IChatMessage> {
-    if (Types.ObjectId.isValid(deliveryId)) {
-      return { deliveryId: new Types.ObjectId(deliveryId) };
-    }
-    return { deliveryId };
+    const idObj = Types.ObjectId.isValid(deliveryId) ? new Types.ObjectId(deliveryId) : deliveryId;
+    return {
+      $or: [{ deliveryId: idObj }, { delivery: idObj }],
+    };
   }
 }
 
 export const chatMessageRepository = new ChatMessageRepository();
+export default chatMessageRepository;

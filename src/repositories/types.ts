@@ -1,4 +1,11 @@
-import { ClientSession, FilterQuery, ProjectionType, QueryOptions, UpdateQuery } from 'mongoose';
+import {
+  ClientSession,
+  FilterQuery,
+  ProjectionType,
+  QueryOptions,
+  SortOrder,
+  UpdateQuery,
+} from 'mongoose';
 
 /**
  * Options accepted by every read operation on a repository.
@@ -10,8 +17,8 @@ import { ClientSession, FilterQuery, ProjectionType, QueryOptions, UpdateQuery }
 export interface ReadOptions<T> {
   /** Field selection, e.g. `'+password'` or `{ password: 1 }`. */
   projection?: ProjectionType<T>;
-  /** Sort specification, e.g. `{ createdAt: -1 }`. */
-  sort?: Record<string, 1 | -1>;
+  /** Sort specification, e.g. `{ createdAt: -1 }` or `{ lastModified: 'asc' }`. */
+  sort?: Record<string, SortOrder>;
   /** Number of documents to skip (pagination offset). */
   skip?: number;
   /** Maximum number of documents to return. */

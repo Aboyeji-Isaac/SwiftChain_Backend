@@ -5,6 +5,7 @@ import deliveryChatRoutes from './deliveryChatRoutes';
 import deliveryCrudRoutes from './delivery.routes';
 import deliveryEtaRoutes from './deliveryRoutes';
 import deliveryStatusRoutes from './deliveries';
+import deliveryEventRoutes from './deliveryEventRoutes';
 import adminRoutes from './adminRoutes';
 import driverRoutes from './driverRoutes';
 import fleetRoutes from './fleetRoutes';
@@ -25,6 +26,9 @@ import proofOfDeliveryRoutes from './proofOfDeliveryRoutes';
 import escrowRoutes from './escrow.routes';
 import escrowIndexerRoutes from './escrowIndexer.routes';
 import indexerRoutes from './indexer.routes';
+import poolingRoutes from './poolingRoutes';
+import chatRoutes from './chatRoutes';
+import escrowAdminRoutes from './escrowAdminRoutes';
 
 const router = Router();
 
@@ -36,8 +40,11 @@ router.use('/v1/deliveries', deliveryChatRoutes);
 router.use('/v1/deliveries', deliveryCrudRoutes);
 router.use('/v1/deliveries', deliveryEtaRoutes);
 router.use('/v1/deliveries', deliveryStatusRoutes);
+router.use('/v1/deliveries', deliveryEventRoutes);
 router.use('/v1/deliveries', assignmentRoutes);
 router.use('/v1/deliveries', proofOfDeliveryRoutes);
+router.use('/v1/deliveries', chatRoutes);
+router.use('/v1/admin/escrows', escrowAdminRoutes);
 router.use('/v1/admin', adminRoutes);
 router.use('/v1/drivers', driverRoutes);
 router.use('/v1/fleets', fleetRoutes);
@@ -57,5 +64,7 @@ router.use('/v1/escrow', escrowRoutes);
 router.use('/v1/indexer', escrowIndexerRoutes);
 // Delivery-created contract events are posted by the indexer worker.
 router.use('/v1/indexer', indexerRoutes);
+
+router.use('/v1/pooling', poolingRoutes);
 
 export default router;

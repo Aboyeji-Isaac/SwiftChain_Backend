@@ -3,6 +3,7 @@ import { StatusCodes } from 'http-status-codes';
 import eventLogService from '../services/eventLogService';
 import { sendSuccess, sendError } from '../utils/responseWrapper';
 import logger from '../config/logger';
+import { resolveQueryOptions, buildPaginationMeta } from '../middlewares/queryMiddleware';
 
 export class EventLogController {
   /**
@@ -33,8 +34,17 @@ export class EventLogController {
    */
   async getUnprocessedEvents(req: Request, res: Response, next: NextFunction): Promise<void> {
     try {
-      const events = await eventLogService.getUnprocessedEvents();
-      sendSuccess(res, events, 'Unprocessed events retrieved successfully', StatusCodes.OK);
+      const { page, limit, sort } = resolveQueryOptions(req);
+      const result = await eventLogService.getUnprocessedEvents(page, limit, sort);
+      sendSuccess(
+        res,
+        {
+          events: result.data,
+          meta: buildPaginationMeta(result.total, result.page, result.limit),
+        },
+        'Unprocessed events retrieved successfully',
+        StatusCodes.OK,
+      );
     } catch (error) {
       logger.error('Error in getUnprocessedEvents:', error);
       next(error);

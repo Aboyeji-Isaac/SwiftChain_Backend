@@ -3,9 +3,7 @@ import env from '../config/env';
 
 const isTest = env.NODE_ENV === 'test' || !!process.env.JEST_WORKER_ID;
 
-// In express-rate-limit v6 `max: 0` disables the limiter, but v7 blocks all
-// traffic with it. Encoding "unlimited in tests" as a huge window keeps the
-// same behaviour safe across both major versions.
+/** Effectively-unbounded request cap used to disable limiting in tests. */
 const TEST_UNLIMITED_MAX = 1_000_000;
 
 /**

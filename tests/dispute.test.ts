@@ -422,9 +422,9 @@ describe('GET /api/v1/disputes', () => {
     const res = await request(app).get('/api/v1/disputes').set('Authorization', `Bearer ${token}`);
 
     expect(res.status).toBe(200);
-    expect(Array.isArray(res.body.data)).toBe(true);
-    expect(res.body.data.length).toBeGreaterThanOrEqual(1);
-    expect(res.body.meta.total).toBeGreaterThanOrEqual(1);
+    expect(Array.isArray(res.body.data.disputes)).toBe(true);
+    expect(res.body.data.disputes.length).toBeGreaterThanOrEqual(1);
+    expect(res.body.data.meta.totalItems).toBeGreaterThanOrEqual(1);
   });
 
   it('filters disputes by status', async () => {
