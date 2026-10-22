@@ -12,10 +12,11 @@ const router = Router();
  *   put:
  *     tags: [Delivery Status]
  *     summary: Transition a delivery to its next status
- *     description: >     *     Restricted to drivers and admins. Delegates to the canonical
- *     DeliveryService state machine (pending -> funded -> assigned ->
- *     in_progress -> completed / cancelled); legacy vocabulary
- *     (picked_up/in_transit/delivered) is rejected explicitly.
+ *     description: >-
+ *       Restricted to drivers and admins. Delegates to the canonical
+ *       DeliveryService state machine (pending -> funded -> assigned ->
+ *       in_progress -> completed / cancelled); legacy vocabulary
+ *       (picked_up/in_transit/delivered) is rejected explicitly.
  *     security:
  *       - bearerAuth: []
  *     parameters:
