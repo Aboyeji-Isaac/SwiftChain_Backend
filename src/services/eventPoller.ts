@@ -11,8 +11,9 @@
  *      from the ledger after the checkpoint up to the latest ledger.
  *   3. Records each event in EventLog (deduplicated on
  *      {transactionHash, eventType}) and dispatches it to its handler.
- *   4. Marks handler failures as `failed` with the error message so they can
- *      be retried later. A failure does not block the checkpoint.
+ *   4. Marks handler failures as `failed` with the error message and schedules
+ *      the first retry (`nextRetryAt`) for the EventLog retry job. A failure
+ *      does not block the checkpoint.
  *   5. Advances IndexerStatus.lastProcessedLedger to the ledger it synced to.
  *
  * monitorService.checkIndexerLag compares that checkpoint with the network
@@ -20,11 +21,12 @@
  */
 
 import { rpc as StellarRpc, xdr } from '@stellar/stellar-sdk';
-import EventLog from '../models/EventLog';
+import EventLog, { IEventLog } from '../models/EventLog';
 import { IndexerStatus } from '../models/IndexerStatus';
 import { escrowIndexerConfig } from '../config/escrow';
 import env from '../config/env';
 import logger from '../config/logger';
+import { nextEventLogRetryAt } from '../utils/eventLogBackoff';
 import { handleEscrowFundedEvent } from '../indexer/escrowHandlers';
 import type { ISorobanRpcClient, SorobanGetEventsRequest } from './providers/sorobanRpcClient';
 import { defaultSorobanRpcClient } from './providers/adapters';
@@ -69,6 +71,17 @@ export interface PollCycleResult {
 
 type EventOutcome = 'processed' | 'duplicates' | 'failed';
 
+/** The parts of an EventLog entry needed to find and re-dispatch its event. */
+export type ReplayableEvent = Pick<
+  IEventLog,
+  'eventType' | 'transactionHash' | 'ledgerSequence' | 'eventData'
+>;
+
+/** Re-dispatches a recorded event; implemented by {@link EventPoller.replay}. */
+export interface EventReplayer {
+  replay(entry: ReplayableEvent): Promise<void>;
+}
+
 // ─── Constants ─────────────────────────────────────────────────────────────────
 
 const DEFAULT_INTERVAL_MS = 10_000;
@@ -85,7 +98,7 @@ const isDuplicateKeyError = (error: unknown): boolean =>
 
 // ─── Poller ────────────────────────────────────────────────────────────────────
 
-export class EventPoller {
+export class EventPoller implements EventReplayer {
   private readonly options: EventPollerOptions;
   private readonly subscriptionsByTopic: Map<string, EventSubscription>;
   private readonly filters: SorobanGetEventsRequest['filters'];
@@ -169,6 +182,47 @@ export class EventPoller {
     return result;
   }
 
+  /**
+   * Re-run one recorded event through the handler registered for its topic —
+   * the same dispatch path {@link ingest} uses — without touching its EventLog
+   * entry; the caller owns the outcome. EventLog keeps only a reference to the
+   * event, so it is fetched back from the RPC node by ledger and event id.
+   *
+   * @throws when the node no longer serves the event (outside its retention
+   *         window), when no subscription handles its topic, or when the
+   *         handler itself throws.
+   */
+  async replay(entry: ReplayableEvent): Promise<void> {
+    const event = await this.findRecordedEvent(entry);
+    if (!event) {
+      throw new Error(
+        `Event for tx=${entry.transactionHash} is no longer available at ledger ${entry.ledgerSequence}`,
+      );
+    }
+
+    const subscription = this.subscriptionForEvent(event);
+    if (!subscription || subscription.eventType !== entry.eventType) {
+      throw new Error(
+        `No ${entry.eventType} subscription handles the event for tx=${entry.transactionHash}`,
+      );
+    }
+
+    await subscription.handle(event);
+  }
+
+  /** Find the event an EventLog entry recorded, matching on event id when one was stored. */
+  private async findRecordedEvent(
+    entry: ReplayableEvent,
+  ): Promise<StellarRpc.Api.EventResponse | null> {
+    const eventId = (entry.eventData as { eventId?: string } | null | undefined)?.eventId;
+
+    for await (const event of this.fetchEvents(entry.ledgerSequence, entry.ledgerSequence)) {
+      const matches = eventId ? event.id === eventId : event.txHash === entry.transactionHash;
+      if (matches) return event;
+    }
+    return null;
+  }
+
   /** Page through `getEvents` from `fromLedger`, yielding events up to `toLedger`. */
   private async *fetchEvents(
     fromLedger: number,
@@ -243,7 +297,15 @@ export class EventPoller {
       return 'processed';
     } catch (error) {
       const errorMessage = error instanceof Error ? error.message : String(error);
-      await EventLog.updateOne({ transactionHash, eventType }, { status: 'failed', errorMessage });
+      await EventLog.updateOne(
+        { transactionHash, eventType },
+        {
+          status: 'failed',
+          errorMessage,
+          lastError: errorMessage,
+          nextRetryAt: nextEventLogRetryAt(1),
+        },
+      );
       logger.error(
         `[EventPoller] Handler failed — type=${eventType} tx=${transactionHash} ` +
           `ledger=${event.ledger} error="${errorMessage}"`,
@@ -311,6 +373,18 @@ export const startEventPoller = (): void => {
     `[EventPoller] Started — network=${env.STELLAR_NETWORK} contract=${escrowIndexerConfig.contractId} ` +
       `topic=${escrowIndexerConfig.fundedEventTopic}`,
   );
+};
+
+/**
+ * The replayer the EventLog retry path dispatches through: the running poller
+ * when there is one, otherwise an idle poller with the same subscriptions
+ * (it is never started, only used to replay). Null when no contract is
+ * configured, since there is then nothing to replay against.
+ */
+export const getEventReplayer = (): EventReplayer | null => {
+  if (activePoller) return activePoller;
+  if (!escrowIndexerConfig.contractId) return null;
+  return createDefaultPoller();
 };
 
 export const stopEventPoller = (): void => {

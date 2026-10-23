@@ -37,7 +37,7 @@ export class DlqService {
   /**
    * Retry a specific DLQ entry.
    */
-  public async retryEntry(id: string): Promise<any> {
+  public async retryEntry(id: string, actorId?: string | null): Promise<any> {
     const entry = await DlqEntry.findById(id);
     if (!entry) {
       throw new AppError('DLQ entry not found', StatusCodes.NOT_FOUND);
@@ -53,6 +53,19 @@ export class DlqService {
     await entry.save();
 
     try {
+      // Escalated indexer events re-drive through the EventLog retry path, which
+      // replays them via the event poller. Dynamic import: that service imports this one.
+      if (entry.payload?.type === 'eventlog') {
+        const { eventLogRetryService } = await import('./eventLogRetryService');
+        const retried = await eventLogRetryService.retryById(entry.payload.eventLogId, actorId);
+        if (retried.outcome !== 'processed') {
+          throw new Error(retried.event.lastError ?? 'Event handler failed again');
+        }
+        entry.status = DlqStatus.RESOLVED;
+        await entry.save();
+        return retried;
+      }
+
       // Dynamic import to break circular dependency with stellarService
       const { stellarService } = await import('./stellarService');
 
