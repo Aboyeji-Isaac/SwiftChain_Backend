@@ -116,6 +116,17 @@ mirrors what is mounted in `src/routes/index.ts`.
 - `POST /api/v1/auth/register` - Register a new user/driver.
 - `POST /api/v1/auth/login` - Authenticate and retrieve token.
 
+### Merchant Onboarding
+
+- `POST /api/v1/onboarding/merchant` - Register onboarding intent with business metadata, the
+  treasury Stellar address, owner contact details and a webhook URL. Returns a challenge message;
+  nothing is created yet.
+- `PUT /api/v1/onboarding/merchant/wallet` - Submit `{ onboardingId, signature, password }`, where
+  `signature` is the treasury key's base64 Ed25519 signature of the challenge (raw or SEP-53). On
+  success the enterprise owner account, the fleet and a default webhook subscription for every
+  delivery milestone are created; the response carries the owner's token and the one-time webhook
+  signing secret.
+
 ### Deliveries
 
 - `POST /api/v1/deliveries` - Create a new delivery request.
