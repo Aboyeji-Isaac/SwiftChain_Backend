@@ -17,9 +17,9 @@
  */
 
 import mongoose from 'mongoose';
+import crypto from 'crypto';
 import { MongoMemoryServer } from 'mongodb-memory-server';
 import httpStatus from 'http-status-codes';
-import { v4 as uuidv4 } from 'uuid';
 
 import { InMemoryRedis } from '../helpers/InMemoryRedis';
 
@@ -49,7 +49,7 @@ const TTL_SECONDS = env.IDEMPOTENCY_TTL_SECONDS;
 const TTL_MS = TTL_SECONDS * 1000;
 
 /** Unique key per test so no state can leak between cases. */
-const newKey = (): string => uuidv4();
+const newKey = (): string => crypto.randomUUID();
 
 /** Endpoint discriminator in the same shape the middleware builds. */
 const ESCROW_FUND_ENDPOINT = 'POST:/api/v1/escrow/fund';

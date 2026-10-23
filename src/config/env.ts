@@ -193,6 +193,8 @@ interface EnvConfig {
   WEBHOOK_RETRY_CRON: string;
   /** Maximum due attempts processed per retry sweep tick. Default: 50 */
   WEBHOOK_RETRY_BATCH_SIZE: number;
+  /** Flush window (ms) for grouping batched webhook deliveries. Default: 1000 */
+  WEBHOOK_BATCH_FLUSH_WINDOW_MS: number;
 
   // ── Indexer event retries ─────────────────────────────────────────
   /** Retry attempts allowed for a failed EventLog entry before it is escalated to the DLQ. Default: 5 */
@@ -398,6 +400,7 @@ const envSchema = z.object({
   WEBHOOK_RETRY_MAX_MS: z.coerce.number().int().min(1000).default(3600000),
   WEBHOOK_RETRY_CRON: z.string().trim().min(1).default('* * * * *'),
   WEBHOOK_RETRY_BATCH_SIZE: z.coerce.number().int().min(1).max(500).default(50),
+  WEBHOOK_BATCH_FLUSH_WINDOW_MS: z.coerce.number().int().min(50).default(1000),
 
   // ── Indexer event retries ─────────────────────────────────────────
   EVENTLOG_RETRY_MAX_ATTEMPTS: z.coerce.number().int().min(1).max(20).default(5),

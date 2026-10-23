@@ -29,6 +29,7 @@ export const registerWebhook = async (
       merchantId: user._id.toString(),
       url: req.body.url,
       events: req.body.events,
+      allowBatch: req.body.allowBatch,
       description: req.body.description,
     });
 

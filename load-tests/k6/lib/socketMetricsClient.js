@@ -102,7 +102,9 @@ export class SocketMetricsClient {
       `[Metrics Poll #${this.pollCount}] ` +
       `Connected: ${m.connectedSockets} | ` +
       `Messages: ${m.messagesProcessed} | ` +
-      `Latency p95/p99: ${m.messageLatencyMs.p95?.toFixed(1) || 'N/A'}/${m.messageLatencyMs.p99?.toFixed(1) || 'N/A'} ms | ` +
+      `Latency p95/p99: ${m.messageLatencyMs.p95?.toFixed(1) || 'N/A'}/${
+        m.messageLatencyMs.p99?.toFixed(1) || 'N/A'
+      } ms | ` +
       `Memory: ${m.memoryUsageBytes.heapUsedMB?.toFixed(0) || 'N/A'} MB heap`
     );
   }

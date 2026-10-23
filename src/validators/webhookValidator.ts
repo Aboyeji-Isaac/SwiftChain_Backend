@@ -6,6 +6,7 @@ export const registerWebhookSchema = z.object({
   events: z
     .array(z.enum(WebhookEvent, { error: 'Each event must be a valid webhook event.' }))
     .min(1, 'At least one event must be selected.'),
+  allowBatch: z.boolean().optional(),
   description: z.string().trim().max(500).optional(),
 });
 
@@ -16,6 +17,7 @@ export const updateWebhookSchema = z
       .array(z.enum(WebhookEvent, { error: 'Each event must be a valid webhook event.' }))
       .min(1, 'At least one event must be selected.')
       .optional(),
+    allowBatch: z.boolean().optional(),
     isActive: z.boolean().optional(),
     description: z.string().trim().max(500).optional(),
   })

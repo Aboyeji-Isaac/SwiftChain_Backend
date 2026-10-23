@@ -47,26 +47,30 @@ export class GoogleMapsRoutingProvider implements IRoutingProvider {
   }
 
   async calculateETA(request: ETARequest): Promise<ETAResponse> {
+    const key = this.apiKey || process.env.GOOGLE_MAPS_API_KEY;
     try {
-      if (this.apiKey) {
-        return await this.calculateWithGoogleMaps(request);
+      if (key) {
+        return await this.calculateWithGoogleMaps(request, key);
       }
       return this.calculateWithHaversine(request);
     } catch (error) {
+      if (error instanceof Error && error.message.startsWith('Google Maps API error')) {
+        throw error;
+      }
       // eslint-disable-next-line no-console
       console.error('Failed to calculate ETA:', error);
       throw new Error('Failed to calculate delivery ETA');
     }
   }
 
-  private async calculateWithGoogleMaps(request: ETARequest): Promise<ETAResponse> {
+  private async calculateWithGoogleMaps(request: ETARequest, key?: string): Promise<ETAResponse> {
     const { pickup, dropoff, travelMode = 'driving' } = request;
 
     const params = {
       origin: `${pickup.lat},${pickup.lng}`,
       destination: `${dropoff.lat},${dropoff.lng}`,
       mode: travelMode,
-      key: this.apiKey,
+      key: key || this.apiKey,
       units: 'metric',
     };
 

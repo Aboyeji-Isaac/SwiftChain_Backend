@@ -12,8 +12,8 @@ async function updateDeliveryOnChainCreation(
 ): Promise<unknown> {
   const updated = await Delivery.findOneAndUpdate(
     { deliveryId },
-    { contractId },
-    { new: true },
+    { contractId, status: DeliveryStatus.ASSIGNED },
+    { new: true, runValidators: true },
   ).lean();
 
   if (!updated) {

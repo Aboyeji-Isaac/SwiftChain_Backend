@@ -35,8 +35,46 @@ import type { ETARequest } from '../../src/services/routingService';
  * Mock axios to control Google Maps API responses.
  * Only the HTTP client is mocked; the routing service logic itself is real.
  */
-jest.mock('axios');
+jest.mock('axios', () => {
+  const instance = {
+    interceptors: {
+      request: { use: jest.fn(), eject: jest.fn() },
+      response: { use: jest.fn(), eject: jest.fn() },
+    },
+    get: jest.fn(),
+    post: jest.fn(),
+    put: jest.fn(),
+    delete: jest.fn(),
+    patch: jest.fn(),
+  };
+  return {
+    __esModule: true,
+    default: {
+      ...instance,
+      create: jest.fn(() => instance),
+    },
+    ...instance,
+    create: jest.fn(() => instance),
+  };
+});
 const mockedAxios = axios as jest.Mocked<typeof axios>;
+
+jest.mock('../../src/config/stellar', () => ({
+  stellarConfig: {
+    rpcUrl: 'https://soroban-testnet.stellar.org',
+    networkPassphrase: 'Test SDF Network ; September 2015',
+    network: 'testnet',
+    timeoutMs: 10000,
+    server: {},
+  },
+  default: {
+    rpcUrl: 'https://soroban-testnet.stellar.org',
+    networkPassphrase: 'Test SDF Network ; September 2015',
+    network: 'testnet',
+    timeoutMs: 10000,
+    server: {},
+  },
+}));
 
 jest.mock('../../src/config/logger', () => ({
   info: jest.fn(),

@@ -45,6 +45,18 @@ import {
 
 // ─── Mocks ────────────────────────────────────────────────────────────────────
 
+jest.mock('../../src/config/redis', () => {
+  const actual = jest.requireActual('../../src/config/redis');
+  // eslint-disable-next-line @typescript-eslint/no-var-requires
+  const { InMemoryRedis } = require('../unit/helpers/InMemoryRedis');
+  const instance = new InMemoryRedis();
+  return {
+    ...actual,
+    redisClient: instance,
+    getRedisClient: () => instance,
+  };
+});
+
 jest.mock('../../src/config/logger', () => ({
   info: jest.fn(),
   warn: jest.fn(),

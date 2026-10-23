@@ -1,6 +1,7 @@
 import { Router } from 'express';
 import authRoutes from './authRoutes';
 import bulkDeliveryRoutes from './bulkDeliveryRoutes';
+import deliveryChatRoutes from './deliveryChatRoutes';
 import deliveryCrudRoutes from './delivery.routes';
 import deliveryEtaRoutes from './deliveryRoutes';
 import deliveryStatusRoutes from './deliveries';
@@ -36,6 +37,7 @@ router.use('/v1/auth', authRoutes);
 // Registered before the CRUD routes so the literal /bulk path is matched
 // before any /:id parameter route can capture "bulk" as an identifier.
 router.use('/v1/deliveries', bulkDeliveryRoutes);
+router.use('/v1/deliveries', deliveryChatRoutes);
 router.use('/v1/deliveries', deliveryCrudRoutes);
 router.use('/v1/deliveries', deliveryEtaRoutes);
 router.use('/v1/deliveries', deliveryStatusRoutes);

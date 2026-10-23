@@ -8,7 +8,6 @@ import { deliveryRepository } from '../repositories/DeliveryRepository';
 import httpStatus from 'http-status-codes';
 import Escrow, { IEscrow, EscrowStatus } from '../models/Escrow';
 import Delivery, { DeliveryStatus, IDelivery } from '../models/Delivery';
-import AuditLog from '../models/AuditLog';
 import { AppError } from '../utils/AppError';
 import logger from '../config/logger';
 import { withLock } from '../config/redis';
@@ -57,6 +56,13 @@ export interface ScanExpiredEscrowsResult {
   scannedAt: string;
   flaggedCount: number;
   flaggedEscrows: IEscrow[];
+}
+
+/** Result of one pass of the lapsed funding-windows scan. */
+export interface ScanLapsedFundingWindowsResult {
+  scannedAt: string;
+  cancelledCount: number;
+  cancelledDeliveryIds: string[];
 }
 
 /** Categories of escrows surfaced to admins for review. */
@@ -529,7 +535,9 @@ export class EscrowService {
     const skip = (page - 1) * limit;
 
     const filter = this.buildFlaggedFilter(input.type);
-    const sort = input.sort && Object.keys(input.sort).length > 0 ? input.sort : { updatedAt: -1 };
+    const sort = (
+      input.sort && Object.keys(input.sort).length > 0 ? input.sort : { updatedAt: -1 }
+    ) as Record<string, SortOrder>;
 
     const [escrows, total] = await Promise.all([
       Escrow.find(filter).sort(sort).skip(skip).limit(limit),

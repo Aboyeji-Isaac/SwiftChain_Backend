@@ -36,6 +36,7 @@ export class RedisUnavailableError extends Error {
 export class InMemoryRedis {
   private readonly store = new Map<string, StoredEntry>();
   private unavailable = false;
+  public readonly status: string = 'ready';
 
   constructor(private readonly clock: Clock = Date.now) {}
 
@@ -93,9 +94,25 @@ export class InMemoryRedis {
     return Math.ceil((entry.expiresAtMs - this.clock()) / 1000);
   }
 
-  public async del(key: string): Promise<number> {
+  public async del(...keys: string[]): Promise<number> {
     this.assertAvailable();
-    return this.store.delete(key) ? 1 : 0;
+    let count = 0;
+    for (const key of keys) {
+      if (this.store.delete(key)) count++;
+    }
+    return count;
+  }
+
+  public async keys(pattern: string): Promise<string[]> {
+    this.assertAvailable();
+    const regex = new RegExp('^' + pattern.replace(/\*/g, '.*') + '$');
+    const matched: string[] = [];
+    for (const key of this.store.keys()) {
+      if (this.liveEntry(key) && regex.test(key)) {
+        matched.push(key);
+      }
+    }
+    return matched;
   }
 
   public async flushall(): Promise<'OK'> {

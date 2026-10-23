@@ -27,6 +27,16 @@ jest.mock('../src/blockchain/soroban.service', () => ({
   },
 }));
 
+jest.mock('../src/config/redis', () => ({
+  withLock: jest
+    .fn()
+    .mockImplementation(async (_resourceKey: string, fn: () => Promise<any>) => fn()),
+  redisClient: {
+    get: jest.fn(),
+    set: jest.fn(),
+  },
+}));
+
 // ─── In-memory MongoDB ─────────────────────────────────────────────────────────
 
 let mongoServer: MongoMemoryServer;
@@ -87,6 +97,7 @@ const createActiveEscrow = async () => {
     delivery: new mongoose.Types.ObjectId(),
     amount: 100,
     assetCode: 'XLM',
+    payerAddress: 'GBRPYHIL2CI3FNQ4BXLFMNDLFJUNPU2HY3ZMFSHONUCEOASW7QC7OX2H',
     lockedAt: new Date(),
     expiresAt: new Date(Date.now() + 3600 * 1000),
     status: EscrowStatus.LOCKED,
@@ -206,17 +217,20 @@ describe('PATCH /api/v1/admin/escrows/:id/resolve', () => {
     const res = await request(app)
       .patch(`/api/v1/admin/escrows/${expired._id}/resolve`)
       .set('Authorization', `Bearer ${token}`)
-      .send({ notes: 'Manually released funds to the customer.' });
+      .send({
+        resolution: 'release_to_driver',
+        reason: 'Manually released funds to the customer.',
+      });
 
     expect(res.status).toBe(200);
-    expect(res.body.data.escrow.status).toBe('resolved');
+    expect(res.body.data.escrow.status).toBe(EscrowStatus.RELEASED);
 
     const refreshed = await Escrow.findById(expired._id);
-    expect(refreshed?.status).toBe(EscrowStatus.RESOLVED);
+    expect(refreshed?.status).toBe(EscrowStatus.RELEASED);
     expect(refreshed?.resolvedBy).toBe(admin._id.toString());
   });
 
-  it('returns 400 when notes are missing', async () => {
+  it('returns 400 when reason or resolution is missing', async () => {
     process.env.JWT_SECRET = JWT_SECRET;
 
     const expired = await createExpiredEscrow();
@@ -233,18 +247,27 @@ describe('PATCH /api/v1/admin/escrows/:id/resolve', () => {
     expect(res.status).toBe(400);
   });
 
-  it('returns 409 when the escrow is not in the expired state', async () => {
+  it('returns 409 when the escrow is in a terminal status', async () => {
     process.env.JWT_SECRET = JWT_SECRET;
 
-    const active = await createActiveEscrow();
+    const terminal = await Escrow.create({
+      delivery: new mongoose.Types.ObjectId(),
+      amount: 100,
+      assetCode: 'XLM',
+      payerAddress: 'GBRPYHIL2CI3FNQ4BXLFMNDLFJUNPU2HY3ZMFSHONUCEOASW7QC7OX2H',
+      status: EscrowStatus.RELEASED,
+    });
 
     const admin = await createUser({ role: UserRole.ADMIN });
     const token = signToken(admin._id.toString());
 
     const res = await request(app)
-      .patch(`/api/v1/admin/escrows/${active._id}/resolve`)
+      .patch(`/api/v1/admin/escrows/${terminal._id}/resolve`)
       .set('Authorization', `Bearer ${token}`)
-      .send({ notes: 'Attempting early resolution.' });
+      .send({
+        resolution: 'release_to_driver',
+        reason: 'Attempting terminal resolution.',
+      });
 
     expect(res.status).toBe(409);
   });
@@ -259,7 +282,10 @@ describe('PATCH /api/v1/admin/escrows/:id/resolve', () => {
     const res = await request(app)
       .patch(`/api/v1/admin/escrows/${nonExistentId}/resolve`)
       .set('Authorization', `Bearer ${token}`)
-      .send({ notes: 'Test.' });
+      .send({
+        resolution: 'release_to_driver',
+        reason: 'Test.',
+      });
 
     expect(res.status).toBe(404);
   });

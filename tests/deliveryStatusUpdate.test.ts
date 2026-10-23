@@ -3,6 +3,8 @@ import mongoose from 'mongoose';
 import jwt from 'jsonwebtoken';
 import { MongoMemoryServer } from 'mongodb-memory-server';
 import Delivery from '../src/models/Delivery';
+import User from '../src/models/User';
+import { UserRole } from '../src/interfaces/IUser';
 
 import { Express } from 'express';
 
@@ -38,10 +40,9 @@ describe('Delivery Status Update API', () => {
   let mongoServer: MongoMemoryServer;
   // 16+ chars: satisfies the env schema minimum and matches the CI secret.
   const jwtSecret = 'test-secret-key-16chars';
+  let token: string;
 
-  const buildToken = (role = 'driver'): string => {
-    return jwt.sign({ sub: 'test-user-id', role }, jwtSecret, { expiresIn: '1h' });
-  };
+  const buildToken = (): string => token;
 
   /** Seed a canonical delivery in the given status. */
   const seedDelivery = async (status: string) =>
@@ -61,6 +62,11 @@ describe('Delivery Status Update API', () => {
     process.env.MONGODB_URI = mongoServer.getUri();
     process.env.JWT_SECRET = jwtSecret;
 
+    if (mongoose.connection.readyState !== 0) {
+      await mongoose.disconnect();
+    }
+    await mongoose.connect(mongoServer.getUri());
+
     const imported = await import('../src/app');
     app = imported.default;
   });
@@ -71,8 +77,23 @@ describe('Delivery Status Update API', () => {
     await mongoServer.stop();
   });
 
-  afterEach(async () => {
+  beforeEach(async () => {
     await Delivery.deleteMany({});
+    await User.deleteMany({});
+
+    const driverUser = await User.create({
+      firstName: 'Driver',
+      lastName: 'Test',
+      email: `driver-${Date.now()}@test.com`,
+      password: 'password123',
+      role: UserRole.DRIVER,
+    });
+
+    token = jwt.sign(
+      { userId: driverUser._id.toString(), role: UserRole.DRIVER },
+      process.env.JWT_SECRET || jwtSecret,
+      { expiresIn: '1h' },
+    );
   });
 
   it('returns 401 when authorization token is missing', async () => {
@@ -81,14 +102,14 @@ describe('Delivery Status Update API', () => {
       .send({ status: 'assigned' });
 
     expect(response.status).toBe(401);
-    expect(response.body).toHaveProperty('status', 'error');
-    expect(response.body.message).toMatch(/Authorization header missing or malformed/i);
+    expect(response.body).toHaveProperty('success', false);
+    expect(response.body.message).toMatch(/Authentication required/i);
   });
 
   it('updates delivery status after a valid canonical transition', async () => {
     const delivery = await seedDelivery('pending');
 
-    const token = buildToken('driver');
+    const token = buildToken();
 
     const response = await request(app)
       .put(`/api/v1/deliveries/${delivery._id}/status`)
@@ -96,7 +117,7 @@ describe('Delivery Status Update API', () => {
       .send({ status: 'assigned' });
 
     expect(response.status).toBe(200);
-    expect(response.body).toHaveProperty('status', 'success');
+    expect(response.body).toHaveProperty('success', true);
     expect(response.body.data).toHaveProperty('status', 'assigned');
 
     const updated = await Delivery.findById(delivery._id);
@@ -107,7 +128,7 @@ describe('Delivery Status Update API', () => {
   it('returns 400 for a canonical state-machine violation (skipping states)', async () => {
     const delivery = await seedDelivery('pending');
 
-    const token = buildToken('driver');
+    const token = buildToken();
 
     const response = await request(app)
       .put(`/api/v1/deliveries/${delivery._id}/status`)
@@ -115,7 +136,7 @@ describe('Delivery Status Update API', () => {
       .send({ status: 'completed' });
 
     expect(response.status).toBe(400);
-    expect(response.body).toHaveProperty('status', 'error');
+    expect(response.body).toHaveProperty('success', false);
     expect(response.body.message).toMatch(/cannot transition/i);
 
     // The document keeps its original status — nothing was half-written.
@@ -127,7 +148,7 @@ describe('Delivery Status Update API', () => {
     'rejects the legacy status value %s with an explicit message (issue #211)',
     async (legacyStatus) => {
       const delivery = await seedDelivery('pending');
-      const token = buildToken('driver');
+      const token = buildToken();
 
       const response = await request(app)
         .put(`/api/v1/deliveries/${delivery._id}/status`)
@@ -135,7 +156,7 @@ describe('Delivery Status Update API', () => {
         .send({ status: legacyStatus });
 
       expect(response.status).toBe(400);
-      expect(response.body).toHaveProperty('status', 'error');
+      expect(response.body).toHaveProperty('success', false);
 
       // Nothing may be written: the document must still be canonical-pending.
       const unchanged = await Delivery.findById(delivery._id);
@@ -146,7 +167,7 @@ describe('Delivery Status Update API', () => {
 
   it('returns 400 when the status value is not a string at all', async () => {
     const delivery = await seedDelivery('pending');
-    const token = buildToken('driver');
+    const token = buildToken();
 
     const response = await request(app)
       .put(`/api/v1/deliveries/${delivery._id}/status`)
@@ -167,6 +188,9 @@ describe('Canonical Delivery model enum (issue #211)', () => {
 
   beforeAll(async () => {
     mongoServer = await MongoMemoryServer.create();
+    if (mongoose.connection.readyState !== 0) {
+      await mongoose.disconnect();
+    }
     await mongoose.connect(mongoServer.getUri());
   });
 

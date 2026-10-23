@@ -10,11 +10,10 @@ import { API_PREFIX } from './config.js';
  * this suite) stay focused on describing traffic shape, not HTTP plumbing.
  */
 export function login(email, password) {
-  const res = http.post(
-    `${API_PREFIX}/auth/login`,
-    JSON.stringify({ email, password }),
-    { headers: { 'Content-Type': 'application/json' }, tags: { name: 'AuthLogin' } },
-  );
+  const res = http.post(`${API_PREFIX}/auth/login`, JSON.stringify({ email, password }), {
+    headers: { 'Content-Type': 'application/json' },
+    tags: { name: 'AuthLogin' },
+  });
 
   check(res, {
     'login status is 200': (r) => r.status === 200,
