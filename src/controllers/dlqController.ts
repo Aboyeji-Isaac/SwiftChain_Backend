@@ -2,6 +2,7 @@ import { Request, Response, NextFunction } from 'express';
 import { StatusCodes } from 'http-status-codes';
 import { dlqService } from '../services/dlqService';
 import { sendSuccess } from '../utils/responseWrapper';
+import { IUser } from '../interfaces/IUser';
 
 export class DlqController {
   /**
@@ -35,7 +36,8 @@ export class DlqController {
   public async retryDlqEntry(req: Request, res: Response, next: NextFunction): Promise<void> {
     try {
       const { id } = req.params;
-      const result = await dlqService.retryEntry(id);
+      const user = (req as Request & { user?: IUser }).user;
+      const result = await dlqService.retryEntry(id, user?._id ? String(user._id) : null);
 
       sendSuccess(res, result, 'DLQ entry retried successfully', StatusCodes.OK);
     } catch (error) {

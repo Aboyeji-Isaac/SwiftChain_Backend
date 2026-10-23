@@ -49,7 +49,7 @@ export class LocalStorageDriver implements StorageDriver {
     _mimeType: string,
   ): Promise<StoredObject> {
     const key = buildObjectKey(originalName);
-    const absolutePath = path.join(process.cwd(), this.uploadDir, key);
+    const absolutePath = this.resolveWithinRoot(key, 'write');
 
     await fs.mkdir(path.dirname(absolutePath), { recursive: true });
     await fs.writeFile(absolutePath, buffer);
@@ -62,11 +62,7 @@ export class LocalStorageDriver implements StorageDriver {
   }
 
   public async delete(key: string): Promise<void> {
-    const root = path.resolve(process.cwd(), this.uploadDir);
-    const absolutePath = path.resolve(root, key);
-    if (!absolutePath.startsWith(root + path.sep)) {
-      throw new Error(`Refusing to delete outside upload directory — key=${key}`);
-    }
+    const absolutePath = this.resolveWithinRoot(key, 'delete');
 
     try {
       await fs.unlink(absolutePath);
@@ -74,6 +70,19 @@ export class LocalStorageDriver implements StorageDriver {
     } catch (error) {
       if ((error as NodeJS.ErrnoException).code !== 'ENOENT') throw error;
     }
+  }
+
+  /**
+   * Resolve `key` against the upload root and refuse anything that escapes it
+   * (e.g. `../../etc/passwd`), for both reads/writes and deletes.
+   */
+  private resolveWithinRoot(key: string, action: 'write' | 'delete'): string {
+    const root = path.resolve(process.cwd(), this.uploadDir);
+    const absolutePath = path.resolve(root, key);
+    if (!absolutePath.startsWith(root + path.sep)) {
+      throw new Error(`Refusing to ${action} outside upload directory — key=${key}`);
+    }
+    return absolutePath;
   }
 }
 

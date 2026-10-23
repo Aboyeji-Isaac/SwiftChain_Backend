@@ -4,6 +4,7 @@ import requireRole from '../middleware/requireRole';
 import { suspendUser, getDisputes } from '../controllers/adminController';
 import { getDashboardMetrics } from '../controllers/dashboardController';
 import { dlqController } from '../controllers/dlqController';
+import eventLogController from '../controllers/eventLogController';
 import { UserRole } from '../interfaces/IUser';
 
 const router = Router();
@@ -264,5 +265,78 @@ router.get('/dlq', dlqController.getDlqEntries);
  *         description: Successfully retried the DLQ entry
  */
 router.post('/dlq/:id/retry', dlqController.retryDlqEntry);
+
+/**
+ * @openapi
+ * /v1/admin/eventlog/failed:
+ *   get:
+ *     tags: [Admin]
+ *     summary: List failed indexer events with their retry state
+ *     description: >
+ *       Admin-only. Returns EventLog entries in the `failed` status, newest failure
+ *       first, including `retries`, `lastError`, `nextRetryAt` and `deadLetteredAt`.
+ *       Entries with `deadLetteredAt` set have exhausted their retries and were sent
+ *       to the DLQ; the retry job no longer picks them up.
+ *     security:
+ *       - bearerAuth: []
+ *     parameters:
+ *       - in: query
+ *         name: page
+ *         schema:
+ *           type: integer
+ *           default: 1
+ *       - in: query
+ *         name: limit
+ *         schema:
+ *           type: integer
+ *           default: 20
+ *         description: Items per page (max 100)
+ *     responses:
+ *       200:
+ *         description: Failed events retrieved
+ *       401:
+ *         $ref: '#/components/responses/Unauthorized'
+ *       403:
+ *         description: Requester is not an admin
+ */
+router.get('/eventlog/failed', eventLogController.getFailedEvents.bind(eventLogController));
+
+/**
+ * @openapi
+ * /v1/admin/eventlog/{id}/retry:
+ *   post:
+ *     tags: [Admin]
+ *     summary: Retry a failed indexer event now
+ *     description: >
+ *       Admin-only and audit-logged. Re-runs the event through the event poller's
+ *       dispatch path, ignoring its backoff window. `outcome` is `processed` on
+ *       success, `scheduled` when it failed with attempts left, or `dead_lettered`
+ *       when retries are exhausted and the event was escalated to the DLQ.
+ *       Dead-lettered entries can be retried here as well.
+ *     security:
+ *       - bearerAuth: []
+ *     parameters:
+ *       - in: path
+ *         name: id
+ *         required: true
+ *         schema:
+ *           type: string
+ *     responses:
+ *       200:
+ *         description: Retry attempted; see `outcome`
+ *       400:
+ *         description: Invalid event log id
+ *       401:
+ *         $ref: '#/components/responses/Unauthorized'
+ *       403:
+ *         description: Requester is not an admin
+ *       404:
+ *         $ref: '#/components/responses/NotFound'
+ *       409:
+ *         description: Entry is not failed, or is already being retried
+ *       503:
+ *         description: No escrow contract is configured to replay against
+ */
+router.post('/eventlog/:id/retry', eventLogController.retryFailedEvent.bind(eventLogController));
 
 export default router;
