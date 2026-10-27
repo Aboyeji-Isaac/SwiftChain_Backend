@@ -17,9 +17,7 @@ jest.mock('../src/models/DriverLocation', () => ({
 
 import DriverProfile from '../src/models/DriverProfile';
 import { AdminDriverRepository } from '../src/repositories/AdminDriverRepository';
-import {
-  AdminDriverSearchService,
-} from '../src/services/adminDriverSearchService';
+import { AdminDriverSearchService } from '../src/services/adminDriverSearchService';
 import { QueryOptions } from '../src/types/query';
 
 type Stage = Record<string, unknown>;
@@ -65,7 +63,7 @@ describe('AdminDriverRepository', () => {
     const match = searchStage?.$match as { $or: Array<Record<string, unknown>> };
 
     expect(match.$or).toHaveLength(3);
-    expect(match.$or[0]['user.firstName']).toEqual(/Ada\\\.\\+/i);
+    expect(match.$or[0]['user.firstName']).toEqual(/Ada\.\+/i);
     expect(match.$or[1]['user.lastName']).toBeInstanceOf(RegExp);
     expect(match.$or[2]['user.email']).toBeInstanceOf(RegExp);
   });
@@ -165,7 +163,7 @@ describe('AdminDriverSearchService', () => {
         ],
       }),
     };
-    const service = new AdminDriverSearchService(fakeRepository as never);
+    const service = new AdminDriverSearchService(fakeRepository as unknown as AdminDriverRepository);
 
     const result = await service.search(options({}, 2, 10));
 
