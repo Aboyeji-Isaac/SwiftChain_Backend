@@ -149,7 +149,7 @@ The collector's metric families include:
 - swiftchain_redis_healthy for a Redis PING result.
 - swiftchain_circuit_breaker_open for each registered breaker.
 - swiftchain_indexer_lag_available and swiftchain_indexer_lag_ledgers.
-- swiftchain_socket_* gauges adapted from the existing Socket.IO snapshot.
+- swiftchain_socket_* metrics adapted from the existing Socket.IO snapshot; current connection/latency values are gauges and cumulative totals are counters.
 
 Do not configure an alert on Mongo pool values unless swiftchain_mongodb_pool_stats_available is 1. MongoDB pool fields are read from the installed driver topology and may not be available on every driver version. The collector's indexer snapshot is intended to avoid the alert-writing side effects of the admin on-demand monitor endpoint.
 
