@@ -14,7 +14,7 @@ jest.mock('../src/services/adminDriverSearchService', () => ({
   adminDriverSearchService: {
     search: jest.fn().mockResolvedValue({
       drivers: [],
-      pagination: {
+      meta: {
         totalItems: 0,
         totalPages: 0,
         currentPage: 1,
