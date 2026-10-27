@@ -163,15 +163,29 @@ export class AdminDriverRepository {
         throw ApiError.badRequest('search must be 100 characters or fewer');
       }
       const pattern = new RegExp(escapeRegExp(term), 'i');
-      pipeline.push({
-        $match: {
-          $or: [
-            { 'user.firstName': pattern },
-            { 'user.lastName': pattern },
-            { 'user.email': pattern },
-          ],
+      pipeline.push(
+        {
+          $addFields: {
+            _searchFullName: {
+              $concat: [
+                { $ifNull: ['$user.firstName', ''] },
+                ' ',
+                { $ifNull: ['$user.lastName', ''] },
+              ],
+            },
+          },
         },
-      });
+        {
+          $match: {
+            $or: [
+              { 'user.firstName': pattern },
+              { 'user.lastName': pattern },
+              { 'user.email': pattern },
+              { _searchFullName: pattern },
+            ],
+          },
+        },
+      );
     }
 
     const availability = rawFilter.availability;
