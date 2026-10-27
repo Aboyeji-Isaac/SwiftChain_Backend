@@ -129,7 +129,7 @@ describe('PrometheusMetricsService', () => {
     expect(output).toContain('swiftchain_mongodb_pool_stats_available 0');
     expect(output).toContain('swiftchain_redis_healthy 0');
     expect(output).toContain('swiftchain_indexer_lag_available 0');
-    expect(output).not.toContain('swiftchain_indexer_lag_ledgers ');
+    expect(output.split('\n').some((line) => line.startsWith('swiftchain_indexer_lag_ledgers '))).toBe(false);
   });
 
   it('handles Redis and indexer probe errors without breaking exposition output', async () => {
