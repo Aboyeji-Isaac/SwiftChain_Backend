@@ -108,6 +108,22 @@ export class AdminDriverRepository {
       profileMatch.completedDeliveries = deliveryRange;
     }
 
+    const minTotalDeliveries = numericFilter(rawFilter, 'minTotalDeliveries');
+    const maxTotalDeliveries = numericFilter(rawFilter, 'maxTotalDeliveries');
+    if (minTotalDeliveries !== undefined || maxTotalDeliveries !== undefined) {
+      const totalDeliveryRange: Record<string, number> = {};
+      if (minTotalDeliveries !== undefined) totalDeliveryRange.$gte = minTotalDeliveries;
+      if (maxTotalDeliveries !== undefined) totalDeliveryRange.$lte = maxTotalDeliveries;
+      if (
+        minTotalDeliveries !== undefined &&
+        maxTotalDeliveries !== undefined &&
+        minTotalDeliveries > maxTotalDeliveries
+      ) {
+        throw ApiError.badRequest('minTotalDeliveries cannot exceed maxTotalDeliveries');
+      }
+      profileMatch.totalDeliveries = totalDeliveryRange;
+    }
+
     const pipeline: PipelineStage[] = [
       { $match: profileMatch },
       {
