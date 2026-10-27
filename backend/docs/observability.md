@@ -137,6 +137,22 @@ Operational notes:
 - Counters and the latency sample window are process-local and reset when the process restarts. Aggregate across instances before drawing fleet-wide conclusions.
 - Because the route is not authenticated, restrict it to trusted networks.
 
+## Prometheus exposition endpoint (separate metrics implementation)
+
+The dedicated text exposition endpoint is being implemented separately under issue #248. After that implementation is merged, it is opt-in and disabled unless ENABLE_METRICS=true. It exposes GET /metrics and GET /api/v1/metrics, requires a valid admin Bearer JWT, and returns text/plain Prometheus exposition. Keep it on a trusted network and configure the scraper to supply credentials securely.
+
+The collector's metric families include:
+
+- swiftchain_http_requests_total and swiftchain_http_request_duration_seconds for request volume and latency histograms.
+- swiftchain_process_uptime_seconds, swiftchain_process_resident_memory_bytes, swiftchain_process_heap_used_bytes, and swiftchain_process_heap_total_bytes.
+- swiftchain_mongodb_connection_ready, swiftchain_mongodb_pool_stats_available, and swiftchain_mongodb_pool_connections with total/available/in-use states.
+- swiftchain_redis_healthy for a Redis PING result.
+- swiftchain_circuit_breaker_open for each registered breaker.
+- swiftchain_indexer_lag_available and swiftchain_indexer_lag_ledgers.
+- swiftchain_socket_* gauges adapted from the existing Socket.IO snapshot.
+
+Do not configure an alert on Mongo pool values unless swiftchain_mongodb_pool_stats_available is 1. MongoDB pool fields are read from the installed driver topology and may not be available on every driver version. The collector's indexer snapshot is intended to avoid the alert-writing side effects of the admin on-demand monitor endpoint.
+
 ## Stellar/Soroban endpoints
 
 ### GET /api/v1/stellar/health
