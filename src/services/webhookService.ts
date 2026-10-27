@@ -41,6 +41,7 @@ import {
 import { IDelivery, DeliveryStatus } from '../models/Delivery';
 import AppError from '../utils/AppError';
 import env from '../config/env';
+import { isEnabled } from '../config/flags';
 import logger from '../config/logger';
 
 // ─── DTOs ──────────────────────────────────────────────────────────────────────
@@ -332,6 +333,11 @@ export class WebhookService {
    * @returns Number of attempts processed in this sweep.
    */
   async retryDueAttempts(): Promise<number> {
+    if (!isEnabled('webhookBatching')) {
+      logger.debug('[WebhookService] Webhook retry batching is disabled by feature flag.');
+      return 0;
+    }
+
     const due = await WebhookDeliveryAttempt.find({
       status: WebhookDeliveryStatus.FAILED,
       nextRetryAt: { $lte: new Date() },
