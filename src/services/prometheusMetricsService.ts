@@ -52,14 +52,16 @@ const readMongoPoolSnapshot = (): MongoPoolSnapshot => {
 
     let total = 0;
     let available = 0;
+    let poolsFound = 0;
     for (const server of servers.values()) {
       const pool = server.s?.pool;
       if (!pool) continue;
+      poolsFound += 1;
       total += pool.totalConnectionCount ?? 0;
       available += pool.availableConnectionCount ?? 0;
     }
 
-    return { total, available, introspectionAvailable: true };
+    return { total, available, introspectionAvailable: poolsFound > 0 };
   } catch {
     return { total: 0, available: 0, introspectionAvailable: false };
   }
@@ -173,10 +175,18 @@ class PrometheusMetricsService {
 
     let redisHealthy = 0;
     if (redisClient.status === 'ready') {
+      let timeout: ReturnType<typeof setTimeout> | undefined;
       try {
-        redisHealthy = (await redisClient.ping()) === 'PONG' ? 1 : 0;
+        const ping = redisClient.ping().then((response) => response === 'PONG');
+        const timedOut = new Promise<boolean>((resolve) => {
+          timeout = setTimeout(() => resolve(false), 1000);
+          timeout.unref?.();
+        });
+        redisHealthy = (await Promise.race([ping, timedOut])) ? 1 : 0;
       } catch {
         redisHealthy = 0;
+      } finally {
+        if (timeout) clearTimeout(timeout);
       }
     }
     gauge('swiftchain_redis_healthy', 'Whether Redis responds to a PING command.', redisHealthy);
