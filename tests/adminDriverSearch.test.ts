@@ -93,7 +93,16 @@ describe('AdminDriverRepository', () => {
     ['available', { 'driverLocation.isAvailable': true }],
     ['unavailable', { 'driverLocation.isAvailable': false }],
     ['online', { 'driverLocation.status': 'online' }],
-    ['offline', { 'driverLocation.status': 'offline' }],
+    [
+      'offline',
+      {
+        $or: [
+          { 'driverLocation.status': 'offline' },
+          { driverLocation: { $exists: false } },
+          { driverLocation: null },
+        ],
+      },
+    ],
     ['on_delivery', { 'driverLocation.status': 'on_delivery' }],
   ])('filters availability=%s', async (availability, expected) => {
     const pipeline = await runSearch({ availability });
