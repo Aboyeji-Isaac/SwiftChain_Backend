@@ -181,14 +181,15 @@ export const getIndexerLagSnapshot = async (): Promise<IndexerLagSnapshot | null
   }
 
   const rawNetworkLedger = await sorobanService.getLatestLedger();
-  const networkLedger =
-    typeof rawNetworkLedger === 'number' ? rawNetworkLedger : status.lastProcessedLedger;
+  if (typeof rawNetworkLedger !== 'number') {
+    return null;
+  }
 
   return {
     network: status.network,
     processedLedger: status.lastProcessedLedger,
-    networkLedger,
-    lagLedgers: Math.max(0, networkLedger - status.lastProcessedLedger),
+    networkLedger: rawNetworkLedger,
+    lagLedgers: Math.max(0, rawNetworkLedger - status.lastProcessedLedger),
   };
 };
 
