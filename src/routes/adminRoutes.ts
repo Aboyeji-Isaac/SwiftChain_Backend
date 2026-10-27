@@ -55,7 +55,7 @@ router.use(requireRole(UserRole.ADMIN));
  *       - in: query
  *         name: search
  *         schema: { type: string, maxLength: 100 }
- *         description: Case-insensitive search across first name, last name, and email.
+ *         description: Case-insensitive search across first name, last name, combined full name, and email.
  *       - in: query
  *         name: tier
  *         schema: { type: string, enum: [bronze, silver, gold, platinum] }
