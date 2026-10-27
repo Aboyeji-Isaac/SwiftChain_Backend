@@ -48,7 +48,9 @@ router.use(requireRole(UserRole.ADMIN));
  *   get:
  *     tags: [Admin]
  *     summary: Search and filter drivers
- *     description: Admin-only paginated search over driver profiles and public user fields. Password hashes are never returned.
+ *     description: >
+ *       Admin-only paginated search over driver profiles and public user fields.
+ *       Password hashes are never returned.
  *     security:
  *       - bearerAuth: []
  *     parameters:
