@@ -61,7 +61,8 @@ describe('PrometheusMetricsService', () => {
       'swiftchain_http_requests_total{method="GET",route="/api/v1/drivers/:driverId",status_code="200"} 1',
     );
     expect(output).toContain(
-      'swiftchain_http_request_duration_seconds_bucket{method="GET",route="/api/v1/drivers/:driverId",le="0.05"} 1',
+      'swiftchain_http_request_duration_seconds_bucket' +
+        '{method="GET",route="/api/v1/drivers/:driverId",le="0.05"} 1',
     );
     expect(output).toContain(
       'swiftchain_http_request_duration_seconds_count{method="GET",route="/api/v1/drivers/:driverId"} 1',
