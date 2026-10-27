@@ -204,7 +204,7 @@ Returns the most recent ledger sequence:
       "message": "Latest ledger retrieved successfully"
     }
 
-These routes call the live RPC service. A transient RPC outage, retry, timeout, or open circuit may affect latency or return an error. Do not interpret a successful HTTP response from a cached or unrelated dependency as proof that every Stellar operation is healthy.
+These routes call the live RPC service. A transient RPC outage, retry, timeout, or open circuit may affect latency or return a degraded fallback object even when the HTTP response is 200. Check the response shape and cross-reference GET /api/v1/stellar/health and the circuit-breaker endpoint. Do not interpret a successful HTTP response from a cached or unrelated dependency as proof that every Stellar operation is healthy.
 
 ## Indexer lag and alert history
 
@@ -229,7 +229,7 @@ Example response:
       "message": "Indexer lag status retrieved successfully"
     }
 
-The endpoint currently returns HTTP 200 even when breached is true. Monitor the data.breached field or compare lagLedgers with thresholdLedgers; do not rely on the HTTP status alone.
+The endpoint currently returns HTTP 200 even when breached is true. Monitor the data.breached field or compare lagLedgers with thresholdLedgers; do not rely on the HTTP status alone. If Soroban RPC returns a degraded result, the on-demand check falls back to the processed checkpoint as the network-ledger value, which can make lag appear to be zero. Cross-check the Stellar health and circuit-breaker endpoints before interpreting that zero as healthy progress.
 
 An on-demand check can create an IndexerStatus checkpoint if one does not exist. If the lag exceeds the configured threshold, it logs a critical event, writes an IndexerAlert record, and attempts the configured webhook. Prefer the background monitor and persisted alert history for normal operations rather than calling this endpoint on every scrape.
 
