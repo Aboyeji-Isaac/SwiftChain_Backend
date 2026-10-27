@@ -8,6 +8,8 @@ import rateLimit from 'express-rate-limit';
 import swaggerUi from 'swagger-ui-express';
 
 import routes from './routes';
+import metricsRoutes from './routes/metricsRoutes';
+import prometheusMetricsMiddleware from './middleware/prometheusMetricsMiddleware';
 import logger from './config/logger';
 import { sendError } from './utils/responseWrapper';
 import { connectDatabase } from './config/database';
@@ -37,6 +39,7 @@ app.use(compression());
 // Track in-flight requests and reject new ones during graceful shutdown.
 app.use(requestTracker);
 app.use(requestLogger);
+app.use(prometheusMetricsMiddleware);
 
 // Swagger UI needs inline <script>/<style>, which the default Helmet CSP
 // blocks, so it gets its own relaxed CSP scoped to /api-docs only — the
@@ -91,6 +94,9 @@ app.get('/health', (_req, res): void => {
   });
 });
 
+// Prometheus scrape path follows the conventional /metrics URL; the same
+// protected endpoint is also available at /api/v1/metrics.
+app.use('/metrics', metricsRoutes);
 app.use('/api', routes);
 
 app.use((req, res): void => {
