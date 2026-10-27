@@ -10,7 +10,7 @@ Requires a valid Bearer JWT for an account with the admin role. The endpoint sea
 
 | Parameter | Meaning |
 | --- | --- |
-| search | Case-insensitive match against first name, last name, or email; maximum 100 characters |
+| search | Case-insensitive match against first name, last name, combined full name, or email; maximum 100 characters |
 | tier | bronze, silver, gold, or platinum |
 | minVehicleCapacity | Minimum vehicle capacity in kilograms |
 | minReputation / maxReputation | Inclusive reputation-points range |
