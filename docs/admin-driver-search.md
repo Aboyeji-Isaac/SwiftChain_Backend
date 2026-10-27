@@ -16,6 +16,7 @@ Requires a valid Bearer JWT for an account with the admin role. The endpoint sea
 | minReputation / maxReputation | Inclusive reputation-points range |
 | availability | available, unavailable, online, offline, or on_delivery |
 | minCompletedDeliveries / maxCompletedDeliveries | Inclusive completed-delivery-count range |
+| minTotalDeliveries / maxTotalDeliveries | Inclusive total-delivery-count range |
 | page | 1-based page number; default 1 |
 | limit | Page size; default 20, maximum 100 |
 | sort | Comma-separated allow-listed profile fields; prefix a field with - for descending order |
