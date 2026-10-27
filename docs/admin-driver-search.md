@@ -36,7 +36,7 @@ Requires a valid Bearer JWT for an account with the admin role. The endpoint sea
       --data-urlencode "limit=20" \
       --data-urlencode "sort=-reputationPoints,createdAt"
 
-The response contains a drivers array and pagination metadata, including total items, total pages, current page, and next/previous page indicators.
+The response contains data.drivers and data.meta. The metadata includes totalItems, totalPages, currentPage, limit, hasNextPage, hasPreviousPage, nextPage, and previousPage.
 
 ## Operational notes
 
