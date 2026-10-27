@@ -15,6 +15,7 @@ import Notification, { NotificationStatus } from '../src/models/Notification';
 import NotificationPreference, { NotificationEvent } from '../src/models/NotificationPreference';
 import { DeliveryService } from '../src/services/delivery.service';
 import { notificationService } from '../src/services/notificationService';
+import logger from '../src/config/logger';
 
 jest.mock('../src/config/logger', () => ({
   info: jest.fn(),
@@ -68,9 +69,31 @@ describe('DeliveryService.updateStatus', () => {
       Notification.deleteMany({}),
       NotificationPreference.deleteMany({}),
     ]);
-  });
+  }); // ── Permitted transitions ─────────────────────────────────────────────
 
-  // ── Permitted transitions ─────────────────────────────────────────────────
+  /**
+   * Attach valid proof of delivery to a delivery. Completion transitions
+   * require it (the gate landed upstream with the proof-of-delivery flow),
+   * so tests that walk a delivery to `completed` seed it first.
+   */
+  const addProofOfDelivery = async (id: string): Promise<void> => {
+    await Delivery.updateOne(
+      { _id: id },
+      {
+        $set: {
+          proofOfDelivery: {
+            storageKey: `proofs/${id}.jpg`,
+            imageUrl: `https://cdn.example.com/proofs/${id}.jpg`,
+            storageDriver: 'local',
+            mimeType: 'image/jpeg',
+            sizeBytes: 1024,
+            uploadedBy: senderId.toHexString(),
+            uploadedAt: new Date(),
+          },
+        },
+      },
+    );
+  };
 
   describe('permitted transitions', () => {
     it.each([
@@ -83,6 +106,10 @@ describe('DeliveryService.updateStatus', () => {
       [DeliveryStatus.IN_PROGRESS, DeliveryStatus.CANCELLED],
     ])('allows %s -> %s', async (from, to) => {
       const delivery = await createDelivery(from);
+      if (to === DeliveryStatus.COMPLETED) {
+        // Completion is gated on proof of delivery being on record.
+        await addProofOfDelivery(String(delivery._id));
+      }
       const updated = await service.updateStatus(String(delivery._id), to);
 
       expect(updated.status).toBe(to);
@@ -94,10 +121,24 @@ describe('DeliveryService.updateStatus', () => {
 
       await service.updateStatus(id, DeliveryStatus.ASSIGNED);
       await service.updateStatus(id, DeliveryStatus.IN_PROGRESS);
+      await addProofOfDelivery(id);
       const completed = await service.updateStatus(id, DeliveryStatus.COMPLETED);
 
       expect(completed.status).toBe(DeliveryStatus.COMPLETED);
       expect(notifySpy).toHaveBeenCalledTimes(3);
+    });
+
+    it('rejects completing a delivery that has no proof of delivery on record', async () => {
+      const delivery = await createDelivery(DeliveryStatus.IN_PROGRESS);
+      const id = String(delivery._id);
+
+      await expect(service.updateStatus(id, DeliveryStatus.COMPLETED)).rejects.toThrow(
+        /proof of delivery/i,
+      );
+
+      // The gate fires before the write: the delivery stays in progress.
+      const unchanged = await Delivery.findById(id);
+      expect(unchanged?.status).toBe(DeliveryStatus.IN_PROGRESS);
     });
   });
 
@@ -210,14 +251,19 @@ describe('DeliveryService.updateStatus', () => {
       notifySpy.mockRejectedValueOnce(new Error('push provider unreachable'));
       const delivery = await createDelivery(DeliveryStatus.ASSIGNED);
 
-      // The rejection propagates, but the status write has already committed:
-      // a delivery must never revert because a push failed.
+      // The milestone fan-out isolates consumer failures (see
+      // DeliveryService.emitMilestone/runConsumer): the push rejection is
+      // logged and swallowed, and the already-committed transition stands.
       await expect(
         service.updateStatus(String(delivery._id), DeliveryStatus.IN_PROGRESS),
-      ).rejects.toThrow(/push provider unreachable/);
+      ).resolves.toMatchObject({ status: DeliveryStatus.IN_PROGRESS });
 
       const stored = await Delivery.findById(delivery._id);
       expect(stored?.status).toBe(DeliveryStatus.IN_PROGRESS);
+
+      expect(logger.error).toHaveBeenCalledWith(
+        expect.stringContaining('Milestone notification consumer failed'),
+      );
     });
 
     it('writes an audit record end to end through the real service', async () => {

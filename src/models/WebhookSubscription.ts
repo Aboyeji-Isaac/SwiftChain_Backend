@@ -20,6 +20,7 @@ export enum WebhookEvent {
   DELIVERY_IN_PROGRESS = 'delivery.in_progress',
   DELIVERY_COMPLETED = 'delivery.completed',
   DELIVERY_CANCELLED = 'delivery.cancelled',
+  DELIVERY_BATCH = 'delivery.batch',
 }
 
 export interface IWebhookSubscription extends Document {
@@ -31,6 +32,8 @@ export interface IWebhookSubscription extends Document {
   secret: string;
   /** Events this endpoint wants to receive. */
   events: WebhookEvent[];
+  /** Whether to batch multiple delivery events into a single delivery.batch request. */
+  allowBatch: boolean;
   /** Toggle without deleting the registration. */
   isActive: boolean;
   description?: string;
@@ -54,6 +57,7 @@ const WebhookSubscriptionSchema = new Schema<IWebhookSubscription>(
         message: 'At least one event must be selected.',
       },
     },
+    allowBatch: { type: Boolean, default: false },
     isActive: { type: Boolean, default: true },
     description: { type: String, trim: true, maxlength: 500 },
   },

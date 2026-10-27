@@ -3,6 +3,7 @@ import eventLogController from '../controllers/eventLogController';
 import authenticate from '../middleware/authenticate';
 import requireRole from '../middleware/requireRole';
 import { UserRole } from '../interfaces/IUser';
+import { buildQueryOptions } from '../middlewares/queryMiddleware';
 
 const router = Router();
 
@@ -12,10 +13,16 @@ router.use(authenticate);
 // Get last processed ledger sequence
 router.get('/last-processed', eventLogController.getLastProcessedLedger.bind(eventLogController));
 
-// Get unprocessed events
+// Get unprocessed events (paginated)
 router.get(
   '/unprocessed',
   requireRole(UserRole.ADMIN, UserRole.ENTERPRISE),
+  buildQueryOptions({
+    sortableFields: ['createdAt', 'ledgerSequence'],
+    filterableFields: {},
+    defaultSort: { createdAt: 1 },
+    defaultLimit: 20,
+  }),
   eventLogController.getUnprocessedEvents.bind(eventLogController),
 );
 

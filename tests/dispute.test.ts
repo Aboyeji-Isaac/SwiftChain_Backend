@@ -411,28 +411,34 @@ describe('GET /api/v1/disputes', () => {
     process.env.JWT_SECRET = JWT_SECRET;
 
     const customer = await createUser();
+    const admin = await createUser({ role: UserRole.ADMIN });
     const delivery = await createDelivery({ userId: customer._id.toString() });
     const token = signToken(customer._id.toString());
+    const adminToken = signToken(admin._id.toString());
 
     await request(app)
       .post('/api/v1/disputes')
       .set('Authorization', `Bearer ${token}`)
       .send(validBody(delivery._id.toString()));
 
-    const res = await request(app).get('/api/v1/disputes').set('Authorization', `Bearer ${token}`);
+    const res = await request(app)
+      .get('/api/v1/disputes')
+      .set('Authorization', `Bearer ${adminToken}`);
 
     expect(res.status).toBe(200);
-    expect(Array.isArray(res.body.data)).toBe(true);
-    expect(res.body.data.length).toBeGreaterThanOrEqual(1);
-    expect(res.body.meta.total).toBeGreaterThanOrEqual(1);
+    expect(Array.isArray(res.body.data.disputes)).toBe(true);
+    expect(res.body.data.disputes.length).toBeGreaterThanOrEqual(1);
+    expect(res.body.data.meta.totalItems).toBeGreaterThanOrEqual(1);
   });
 
   it('filters disputes by status', async () => {
     process.env.JWT_SECRET = JWT_SECRET;
 
     const customer = await createUser();
+    const admin = await createUser({ role: UserRole.ADMIN });
     const delivery = await createDelivery({ userId: customer._id.toString() });
     const token = signToken(customer._id.toString());
+    const adminToken = signToken(admin._id.toString());
 
     await request(app)
       .post('/api/v1/disputes')
@@ -441,23 +447,23 @@ describe('GET /api/v1/disputes', () => {
 
     const res = await request(app)
       .get('/api/v1/disputes?status=open')
-      .set('Authorization', `Bearer ${token}`);
+      .set('Authorization', `Bearer ${adminToken}`);
 
     expect(res.status).toBe(200);
-    expect(res.body.data.every((d: { status: string }) => d.status === 'open')).toBe(true);
+    expect(res.body.data.disputes.every((d: { status: string }) => d.status === 'open')).toBe(true);
   });
 
   it('returns 400 for invalid status filter', async () => {
     process.env.JWT_SECRET = JWT_SECRET;
-    const customer = await createUser();
-    const token = signToken(customer._id.toString());
+    const admin = await createUser({ role: UserRole.ADMIN });
+    const adminToken = signToken(admin._id.toString());
 
     const res = await request(app)
       .get('/api/v1/disputes?status=invalid')
-      .set('Authorization', `Bearer ${token}`);
+      .set('Authorization', `Bearer ${adminToken}`);
 
     expect(res.status).toBe(200);
-    expect(res.body.data).toHaveLength(0);
+    expect(res.body.data.disputes).toHaveLength(0);
   });
 });
 

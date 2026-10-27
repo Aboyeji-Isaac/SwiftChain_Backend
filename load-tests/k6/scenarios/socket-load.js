@@ -186,7 +186,14 @@
 import ws from 'k6/ws';
 import { check, sleep, group } from 'k6';
 import http from 'k6/http';
-import { BASE_URL, API_PREFIX, fixtures, drivers, deliveries, SHARED_PASSWORD } from '../lib/config.js';
+import {
+  BASE_URL,
+  API_PREFIX,
+  fixtures,
+  drivers,
+  deliveries,
+  SHARED_PASSWORD,
+} from '../lib/config.js';
 import { login, authHeaders } from '../lib/authClient.js';
 
 /**
@@ -369,7 +376,7 @@ function simulateDriver(driverIndex, durationMs) {
           try {
             const msg = typeof data === 'string' ? JSON.parse(data) : data;
 
-            if (msg.type === 'location_update_ack' || msg.type === '42[\"location_update_ack\",') {
+            if (msg.type === 'location_update_ack' || msg.type === '42["location_update_ack",') {
               // Socket.IO wraps messages in 42[...] format; parse if needed
               let ack;
               if (typeof msg === 'string' && msg.startsWith('42')) {
@@ -502,22 +509,30 @@ export function teardown(data) {
       console.log(`\nLatency Percentiles (milliseconds):`);
       // eslint-disable-next-line no-console
       console.log(
-        `  p50:                    ${metrics.messageLatencyMs.p50 ? metrics.messageLatencyMs.p50.toFixed(2) : 'N/A'} ms`,
+        `  p50:                    ${
+          metrics.messageLatencyMs.p50 ? metrics.messageLatencyMs.p50.toFixed(2) : 'N/A'
+        } ms`,
       );
       // eslint-disable-next-line no-console
       console.log(
-        `  p95:                    ${metrics.messageLatencyMs.p95 ? metrics.messageLatencyMs.p95.toFixed(2) : 'N/A'} ms`,
+        `  p95:                    ${
+          metrics.messageLatencyMs.p95 ? metrics.messageLatencyMs.p95.toFixed(2) : 'N/A'
+        } ms`,
       );
       // eslint-disable-next-line no-console
       console.log(
-        `  p99:                    ${metrics.messageLatencyMs.p99 ? metrics.messageLatencyMs.p99.toFixed(2) : 'N/A'} ms`,
+        `  p99:                    ${
+          metrics.messageLatencyMs.p99 ? metrics.messageLatencyMs.p99.toFixed(2) : 'N/A'
+        } ms`,
       );
       // eslint-disable-next-line no-console
       console.log(`\nMemory Usage (MB):`);
       // eslint-disable-next-line no-console
       console.log(`  Heap Used:              ${metrics.memoryUsageBytes.heapUsedMB.toFixed(2)} MB`);
       // eslint-disable-next-line no-console
-      console.log(`  Heap Total:             ${metrics.memoryUsageBytes.heapTotalMB.toFixed(2)} MB`);
+      console.log(
+        `  Heap Total:             ${metrics.memoryUsageBytes.heapTotalMB.toFixed(2)} MB`,
+      );
       // eslint-disable-next-line no-console
       console.log(`  RSS:                    ${metrics.memoryUsageBytes.rssMB.toFixed(2)} MB`);
       // eslint-disable-next-line no-console

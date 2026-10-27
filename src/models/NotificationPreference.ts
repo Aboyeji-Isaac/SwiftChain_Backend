@@ -12,6 +12,7 @@ export enum NotificationEvent {
   DELIVERY_IN_PROGRESS = 'delivery.in_progress',
   DELIVERY_COMPLETED = 'delivery.completed',
   DELIVERY_CANCELLED = 'delivery.cancelled',
+  MERCHANT_ONBOARDED = 'merchant.onboarded',
 }
 
 /** Transport a notification can be delivered over. */

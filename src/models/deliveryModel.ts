@@ -1,5 +1,21 @@
+/**
+ * @deprecated **Do not use.** Issue #211 retired this legacy delivery model:
+ * its lowercase status vocabulary (`pending/assigned/picked_up/in_transit/
+ * delivered`) once collided with the canonical `Delivery` collection
+ * (`src/models/Delivery.ts`) and corrupted the canonical state machine that
+ * escrow release, driver assignment, and ETA rely on.
+ *
+ * The status-update endpoint now writes exclusively through the canonical
+ * `DeliveryService.updateStatus` -> `DeliveryRepository.transitionStatus`
+ * path. Existing documents carrying legacy statuses are migrated by
+ * `src/scripts/migrateLegacyDeliveryStatuses.ts` (npm run migrate:delivery-statuses).
+ *
+ * Kept only until no remaining references exist; new code must import the
+ * canonical model.
+ */
 import mongoose, { Document, Model, Schema } from 'mongoose';
 
+/** @deprecated Use `DeliveryStatus` from `src/models/Delivery.ts` instead. */
 export type DeliveryStatus = 'pending' | 'assigned' | 'picked_up' | 'in_transit' | 'delivered';
 
 export interface DeliveryDocument extends Document {
@@ -42,6 +58,7 @@ deliverySchema.index({ status: 1 });
 // driver-facing listing endpoint queries this collection by assignedDriver.
 deliverySchema.index({ assignedDriver: 1 });
 
+/** @deprecated Use the canonical `Delivery` from `src/models/Delivery.ts`. */
 export const Delivery =
   (mongoose.models.DeliveryLegacy as Model<DeliveryDocument>) ||
   mongoose.model<DeliveryDocument>('DeliveryLegacy', deliverySchema);

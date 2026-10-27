@@ -116,6 +116,17 @@ mirrors what is mounted in `src/routes/index.ts`.
 - `POST /api/v1/auth/register` - Register a new user/driver.
 - `POST /api/v1/auth/login` - Authenticate and retrieve token.
 
+### Merchant Onboarding
+
+- `POST /api/v1/onboarding/merchant` - Register onboarding intent with business metadata, the
+  treasury Stellar address, owner contact details and a webhook URL. Returns a challenge message;
+  nothing is created yet.
+- `PUT /api/v1/onboarding/merchant/wallet` - Submit `{ onboardingId, signature, password }`, where
+  `signature` is the treasury key's base64 Ed25519 signature of the challenge (raw or SEP-53). On
+  success the enterprise owner account, the fleet and a default webhook subscription for every
+  delivery milestone are created; the response carries the owner's token and the one-time webhook
+  signing secret.
+
 ### Deliveries
 
 - `POST /api/v1/deliveries` - Create a new delivery request.
@@ -213,22 +224,28 @@ metadata:
 
 ## 🗺 Development Roadmap
 
+> **Status (October 2026):** Phase 1 and Phase 2 are fully implemented — every item below is
+> checked off and links to the code that implements it. Phase 3 and Phase 4 remain future work.
+
 ### Phase 1 — MVP (Minimal Logistics Backend)
 
-- [ ] Authentication System (Register/Login/JWT).
-- [ ] Core Delivery CRUD Endpoints.
-- [ ] Driver Assignment Logic.
-- [ ] MongoDB Schema Design.
-- [ ] Basic Validation & Error Handling.
+- [x] Authentication System (register/login, JWT access + refresh tokens) — **Implemented** in `src/controllers/authController.ts`, `src/services/authService.ts`, `src/routes/authRoutes.ts`.
+- [x] Core Delivery CRUD Endpoints (create, list, get, update, plus archive/restore) — **Implemented** in `src/controllers/delivery.controller.ts`, `src/services/delivery.service.ts`, `src/routes/delivery.routes.ts`.
+- [x] Driver Assignment Logic (escrow-gated assignment and nearest-driver auto-assignment) — **Implemented** in `DeliveryService.assignDriver` (`src/services/delivery.service.ts`), `src/services/assignmentService.ts`, `src/routes/assignmentRoutes.ts`.
+- [x] MongoDB Schema Design (Mongoose models for users, deliveries, escrow, disputes, events, notifications, fleets and more) — **Implemented** across `src/models/`.
+- [x] Basic Validation & Error Handling (Zod request validation, central error handler, response envelope) — **Implemented** in `src/validators/`, `src/middleware/validate.ts`, `src/middleware/errorHandler.ts`, `src/utils/responseWrapper.ts`.
 
 ### Phase 2 — Escrow Payment Integration
 
-- [ ] Stellar Payment Service Integration.
-- [ ] Escrow Payment Initiation Endpoints.
-- [ ] Transaction Tracking.
-- [ ] Payment Verification Webhooks.
+- [x] Stellar Payment Service Integration (testnet/mainnet signing, Soroban RPC with circuit breakers) — **Implemented** in `src/services/stellarService.ts`, `src/blockchain/`.
+- [x] Escrow Payment Initiation Endpoints (`POST /api/v1/escrow/fund`, escrow/lock lookups, funding-window enforcement) — **Implemented** in `src/routes/escrow.routes.ts`, `src/controllers/escrow.controller.ts`, `src/services/escrow.service.ts`.
+- [x] Transaction Tracking (append-only delivery milestone log plus on-chain transaction records) — **Implemented** in `src/models/DeliveryEvent.ts`, `src/models/EventLog.ts`, `src/services/transactionService.ts`, exposed through `src/routes/transactionRoutes.ts` and `src/routes/deliveryEventRoutes.ts`.
+- [x] Payment Verification Webhooks (subscriptions, signed dispatch, retries and DLQ) — **Implemented** in `src/services/webhookService.ts`, `src/routes/webhookRoutes.ts`, `src/jobs/webhookRetryJob.ts`, `src/services/dlqService.ts`.
 
 ### Phase 3 — Smart Contract Integration
+
+> **Status: future work — not started as a milestone.** No item below is checked off yet;
+> `src/blockchain/` and `src/indexer/` only provide partial foundations.
 
 - [ ] Soroban Smart Contract Interaction Layer.
 - [ ] Blockchain Event Listeners.
@@ -236,6 +253,10 @@ metadata:
 - [ ] Delivery Proof Validation on Chain.
 
 ### Phase 4 — Platform Scaling
+
+> **Status: future work — not started as a milestone.** No item below is checked off yet, even
+> though early foundations exist (e.g. `src/services/fleetService.ts`,
+> `src/services/driverRatingService.ts`, `src/services/dashboardService.ts`).
 
 - [ ] Logistics Analytics & Reporting APIs.
 - [ ] Fleet Management Features.

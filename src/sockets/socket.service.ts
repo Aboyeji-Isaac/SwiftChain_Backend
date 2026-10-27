@@ -13,7 +13,7 @@ import {
   SocketData,
 } from './socket.types';
 import { messageQueueService } from './messageQueue';
-import env from '../config/env';
+import authService from '../services/authService';
 
 /**
  * Interval (ms) between server-initiated ping events.
@@ -60,13 +60,17 @@ export class SocketService {
     this.connections.set(socket.id, meta);
 
     if (userId) {
-      const flushed = messageQueueService.flush(userId, (event, payload, ackCallback) => {
-        (socket.emit as (event: string, payload: unknown, ack?: unknown) => void)(
-          event,
-          payload,
-          ackCallback,
-        );
-      });
+      const flushed = messageQueueService.flush(
+        userId,
+        (event, payload, ackCallback) => {
+          (socket.emit as (event: string, payload: unknown, ack?: unknown) => void)(
+            event,
+            payload,
+            ackCallback,
+          );
+        },
+        socket,
+      );
 
       if (flushed > 0) {
         logger.info(
@@ -133,6 +137,10 @@ export class SocketService {
         `rooms=${meta.rooms.join(', ')} | ` +
         `remaining=${this.connections.size - 1}`,
     );
+
+    // Rewind any in-flight queued messages so they flush on reconnect, and
+    // stop retry timers so nothing is delivered into the dead socket.
+    messageQueueService.handleDisconnect(meta.userId);
 
     // Remove the connection record
     this.connections.delete(socket.id);

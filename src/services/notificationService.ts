@@ -1,5 +1,5 @@
 import httpStatus from 'http-status-codes';
-import { Types } from 'mongoose';
+import { Types, SortOrder, FilterQuery } from 'mongoose';
 import logger from '../config/logger';
 import { AppError } from '../utils/AppError';
 import { Delivery, DeliveryStatus, IDelivery } from '../models/Delivery';
@@ -58,6 +58,11 @@ const EVENT_COPY: Record<NotificationEvent, { title: string; body: (ref: string)
   [NotificationEvent.DELIVERY_CANCELLED]: {
     title: 'Delivery cancelled',
     body: (ref) => `Delivery ${ref} has been cancelled.`,
+  },
+  [NotificationEvent.MERCHANT_ONBOARDED]: {
+    title: 'Welcome to SwiftChain',
+    body: (ref) =>
+      `Onboarding for ${ref} is complete. You can now create escrow-funded deliveries.`,
   },
 };
 
@@ -155,6 +160,25 @@ export class NotificationService {
     );
 
     return results.filter((record): record is INotification => record !== null);
+  }
+
+  /**
+   * Tell a newly onboarded merchant owner their account is active. Like every
+   * dispatch, a push failure is recorded rather than thrown.
+   */
+  async notifyMerchantOnboarded(
+    ownerId: string,
+    fleet: { id: string; name: string },
+  ): Promise<INotification | null> {
+    const event = NotificationEvent.MERCHANT_ONBOARDED;
+    const copy = EVENT_COPY[event];
+    return this.dispatch({
+      userId: ownerId,
+      event,
+      title: copy.title,
+      body: copy.body(fleet.name),
+      data: { event, fleetId: fleet.id },
+    });
   }
 
   /**
@@ -388,10 +412,31 @@ export class NotificationService {
     return preference;
   }
 
-  /** One page of a user's notification history. */
-  async listForUser(userId: string, page = 1, limit = 20): Promise<Page<INotification>> {
+  /**
+   * One page of a user's notification history.
+   *
+   * `filter`/`sort` come from the shared query middleware whitelist; the
+   * user scoping is applied here so a client can never read another user's
+   * notifications, whatever the query string contains.
+   */
+  async listForUser(
+    userId: string,
+    options: {
+      filter?: Record<string, unknown>;
+      page?: number;
+      limit?: number;
+      sort?: Record<string, SortOrder>;
+    } = {},
+  ): Promise<Page<INotification>> {
     this.assertValidUserId(userId);
-    return this.notificationRepository.listForUser(userId, page, limit);
+    const { filter = {}, page = 1, limit = 20, sort = { createdAt: -1 } } = options;
+    return this.notificationRepository.listForUser(
+      userId,
+      { ...filter, user: userId } as FilterQuery<INotification>,
+      page,
+      limit,
+      sort,
+    );
   }
 
   /** Whether the configured push provider can currently send. */

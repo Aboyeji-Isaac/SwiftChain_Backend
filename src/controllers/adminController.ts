@@ -110,12 +110,12 @@ export const getDisputes = async (
       status: status !== undefined ? String(status) : undefined,
     });
 
-    sendSuccess(
-      res,
-      { disputes: result.disputes, pagination: result.pagination },
-      'Disputes retrieved successfully',
-      StatusCodes.OK,
-    );
+    res.status(StatusCodes.OK).json({
+      success: true,
+      data: result.disputes,
+      pagination: result.pagination,
+      message: 'Disputes retrieved successfully',
+    });
   } catch (error) {
     next(error);
   }

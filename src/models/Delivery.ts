@@ -18,6 +18,14 @@ export interface IDelivery extends Document {
   deliveryFeeAsset?: Asset;
   escrowAmount?: number;
   escrowAsset?: Asset;
+  /**
+   * Funding deadline: set at creation when an escrow amount is configured.
+   * If the escrow is not funded by this instant the delivery is cancelled by
+   * the funding-window lapse scan (see escrowService.scanLapsedFundingWindows).
+   */
+  fundBy?: Date;
+  /** Why the delivery was cancelled (e.g. a lapsed escrow funding window). */
+  cancellationReason?: string;
   notes?: string;
   pickupCoordinates: {
     lat: number;
@@ -106,6 +114,8 @@ const DeliverySchema = new Schema<IDelivery>(
     deliveryFeeAsset: { type: { code: String, issuer: String }, default: { code: 'XLM' } },
     escrowAmount: { type: Number },
     escrowAsset: { type: { code: String, issuer: String }, default: { code: 'XLM' } },
+    fundBy: { type: Date },
+    cancellationReason: { type: String },
     notes: { type: String },
     pickupCoordinates: {
       lat: { type: Number },
@@ -148,6 +158,11 @@ DeliverySchema.index({ driver: 1, createdAt: -1 });
 // GET /api/v1/deliveries/archived: exact match on isDeleted, sorted by deletedAt desc
 // (src/services/delivery.service.ts#listArchived).
 DeliverySchema.index({ isDeleted: 1, deletedAt: -1 });
+
+// Funding-window lapse scan (src/services/escrow.service.ts#scanLapsedFundingWindows):
+// candidates are non-terminal, non-deleted deliveries with a fundBy deadline in
+// the past, newest deadline first.
+DeliverySchema.index({ fundBy: 1, status: 1, isDeleted: 1 });
 
 DeliverySchema.methods.softDelete = async function (
   this: IDelivery,

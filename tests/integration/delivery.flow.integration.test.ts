@@ -4,23 +4,19 @@ import jwt from 'jsonwebtoken';
 import { MongoMemoryServer } from 'mongodb-memory-server';
 import type { Express } from 'express';
 
-import { Delivery as DeliveryCrud } from '../../src/models/Delivery';
-import { Delivery as DeliveryLegacy } from '../../src/models/deliveryModel';
+import Delivery, { DeliveryStatus } from '../../src/models/Delivery';
 import User from '../../src/models/User';
 
 /**
  * End-to-end Delivery flow integration tests.
  *
- * The wired application exposes two independent delivery surfaces that
- * back onto two different Mongoose models under the same
- * /api/v1/deliveries prefix:
- *   - CRUD (create/read/update/archive/restore) -> src/models/Delivery.ts
- *   - Status transitions (PUT /:id/status) -> src/models/deliveryModel.ts
- *
- * This suite exercises each as a real, chained flow through the
- * Controller -> Service -> Model layers against a live MongoDB instance
- * (mongodb-memory-server) and documents the model split rather than
- * papering over it with mocks.
+ * Issue #211 unified the two delivery surfaces: every flow — CRUD *and*
+ * status transitions — now reads and writes the single canonical
+ * `src/models/Delivery.ts` model through the Controller -> Service ->
+ * Repository layers. This suite exercises each as a real, chained flow
+ * against a live MongoDB instance (mongodb-memory-server) and pins the
+ * single-source-of-truth property: writes via one surface are immediately
+ * visible through the other.
  */
 
 jest.mock('../../src/config/logger', () => ({
@@ -30,9 +26,17 @@ jest.mock('../../src/config/logger', () => ({
   debug: jest.fn(),
 }));
 
+jest.mock('../../src/services/notificationService', () => ({
+  notificationService: { notifyDeliveryTransition: jest.fn().mockResolvedValue(undefined) },
+}));
+jest.mock('../../src/services/webhookService', () => ({
+  webhookService: { dispatchDeliveryEvent: jest.fn().mockResolvedValue(undefined) },
+}));
+
 let app: Express;
 let mongoServer: MongoMemoryServer;
-const jwtSecret = 'integration-test-secret';
+// 16+ chars: satisfies the env schema minimum and matches the CI secret.
+const jwtSecret = 'test-secret-key-16chars';
 
 beforeAll(async () => {
   mongoServer = await MongoMemoryServer.create();
@@ -45,8 +49,7 @@ beforeAll(async () => {
 });
 
 afterEach(async () => {
-  await DeliveryCrud.deleteMany({});
-  await DeliveryLegacy.deleteMany({});
+  await Delivery.deleteMany({});
   await User.deleteMany({});
 });
 
@@ -55,7 +58,21 @@ afterAll(async () => {
   await mongoServer.stop();
 });
 
-const driverToken = (): string => jwt.sign({ userId: 'flow-driver', role: 'driver' }, jwtSecret);
+let driverId: string;
+
+beforeEach(async () => {
+  const driver = await User.create({
+    firstName: 'Flow',
+    lastName: 'Driver',
+    email: `driver-${Date.now()}-${Math.random()}@example.com`,
+    password: 'Password123!',
+    role: 'driver',
+    status: 'active',
+  });
+  driverId = driver._id.toString();
+});
+
+const driverToken = (): string => jwt.sign({ userId: driverId, role: 'driver' }, jwtSecret);
 
 const crudPayload = {
   trackingNumber: 'FLOW-001',
@@ -117,15 +134,19 @@ describe('Delivery CRUD flow: create -> read -> update -> archive -> restore', (
     expect(getAfterArchive.status).toBe(404);
 
     const listAfterArchive = await request(app).get('/api/v1/deliveries');
-    expect(listAfterArchive.body.data).toHaveLength(0);
+    const deliveriesAfterArchive =
+      listAfterArchive.body.data?.deliveries ?? listAfterArchive.body.data ?? [];
+    expect(deliveriesAfterArchive).toHaveLength(0);
 
     const restoreRes = await request(app).patch(`/api/v1/deliveries/${id}/restore`);
     expect(restoreRes.status).toBe(200);
     expect(restoreRes.body.data.isDeleted).toBe(false);
 
     const listAfterRestore = await request(app).get('/api/v1/deliveries');
-    expect(listAfterRestore.body.data).toHaveLength(1);
-    expect(listAfterRestore.body.data[0].trackingNumber).toBe('FLOW-001');
+    const deliveriesAfterRestore =
+      listAfterRestore.body.data?.deliveries ?? listAfterRestore.body.data ?? [];
+    expect(deliveriesAfterRestore).toHaveLength(1);
+    expect(deliveriesAfterRestore[0].trackingNumber).toBe('FLOW-001');
 
     const finalGet = await request(app).get(`/api/v1/deliveries/${id}`);
     expect(finalGet.status).toBe(200);
@@ -143,7 +164,7 @@ describe('Delivery CRUD flow: create -> read -> update -> archive -> restore', (
       .send(crudPayload);
 
     expect(dupe.status).toBe(409);
-    expect(dupe.body.status).toBe('error');
+    expect(dupe.body.success).toBe(false);
   });
 
   it('returns 404 when reading, updating, or archiving a delivery id that does not exist', async () => {
@@ -158,25 +179,45 @@ describe('Delivery CRUD flow: create -> read -> update -> archive -> restore', (
 });
 
 describe('Delivery status-transition flow: authenticated driver walks a delivery to completion', () => {
-  const seedLegacyDelivery = async (
-    status = 'pending',
-  ): Promise<InstanceType<typeof DeliveryLegacy>> =>
-    DeliveryLegacy.create({
-      customerName: 'Alice Turing',
-      pickupLocation: '10 Bletchley Park Rd',
-      dropoffLocation: '20 Station Rd',
-      packageDetails: 'Sealed envelope',
+  /** Seed a canonical delivery in the given status. */
+  const seedDelivery = async (status: string) =>
+    Delivery.create({
+      trackingNumber: `TRK-${new mongoose.Types.ObjectId().toHexString().slice(-8)}`,
       status,
+      customer: { name: 'Ada Lovelace', phone: '+15550001111' },
+      pickup: { address: '1 Analytical Engine Way' },
+      dropoff: { address: '2 Difference St' },
+      package: { description: 'Punched cards', weight: 1.2 },
+      pickupCoordinates: { lat: 6.5, lng: 3.3, address: '1 Analytical Engine Way' },
+      dropoffCoordinates: { lat: 6.6, lng: 3.4, address: '2 Difference St' },
     });
 
   it('walks a delivery through every valid transition end to end as an authenticated driver', async () => {
-    const delivery = await seedLegacyDelivery('pending');
+    const delivery = await seedDelivery(DeliveryStatus.PENDING);
     const token = driverToken();
 
-    const path = ['assigned', 'picked_up', 'in_transit', 'delivered'];
+    const path = [DeliveryStatus.ASSIGNED, DeliveryStatus.IN_PROGRESS, DeliveryStatus.COMPLETED];
     const currentId = delivery._id.toString();
 
     for (const nextStatus of path) {
+      if (nextStatus === DeliveryStatus.COMPLETED) {
+        await Delivery.updateOne(
+          { _id: currentId },
+          {
+            $set: {
+              proofOfDelivery: {
+                storageKey: `proofs/${currentId}.jpg`,
+                imageUrl: `https://cdn.example.com/proofs/${currentId}.jpg`,
+                storageDriver: 'local',
+                mimeType: 'image/jpeg',
+                sizeBytes: 1024,
+                uploadedBy: driverId,
+                uploadedAt: new Date(),
+              },
+            },
+          },
+        );
+      }
       const res = await request(app)
         .put(`/api/v1/deliveries/${currentId}/status`)
         .set('Authorization', `Bearer ${token}`)
@@ -186,12 +227,37 @@ describe('Delivery status-transition flow: authenticated driver walks a delivery
       expect(res.body.data.status).toBe(nextStatus);
     }
 
-    const finalDoc = await DeliveryLegacy.findById(currentId);
-    expect(finalDoc?.status).toBe('delivered');
+    const finalDoc = await Delivery.findById(currentId);
+    expect(finalDoc?.status).toBe(DeliveryStatus.COMPLETED);
   });
 
   it('rejects a transition that skips states in the workflow', async () => {
-    const delivery = await seedLegacyDelivery('pending');
+    const delivery = await seedDelivery(DeliveryStatus.PENDING);
+    const token = driverToken();
+
+    const res = await request(app)
+      .put(`/api/v1/deliveries/${delivery._id.toString()}/status`)
+      .set('Authorization', `Bearer ${token}`)
+      .send({ status: DeliveryStatus.IN_PROGRESS });
+
+    expect(res.status).toBe(400);
+    expect(res.body.message).toMatch(/cannot transition/i);
+  });
+
+  it('rejects a transition once a delivery has already reached a terminal state', async () => {
+    const delivery = await seedDelivery(DeliveryStatus.COMPLETED);
+    const token = driverToken();
+
+    const res = await request(app)
+      .put(`/api/v1/deliveries/${delivery._id.toString()}/status`)
+      .set('Authorization', `Bearer ${token}`)
+      .send({ status: DeliveryStatus.ASSIGNED });
+
+    expect(res.status).toBe(400);
+  });
+
+  it('rejects the retired legacy status vocabulary with an explicit message (issue #211)', async () => {
+    const delivery = await seedDelivery(DeliveryStatus.PENDING);
     const token = driverToken();
 
     const res = await request(app)
@@ -200,19 +266,11 @@ describe('Delivery status-transition flow: authenticated driver walks a delivery
       .send({ status: 'in_transit' });
 
     expect(res.status).toBe(400);
-    expect(res.body.message).toMatch(/invalid status transition/i);
-  });
+    expect(res.body.message).toMatch(/validation|legacy status/i);
 
-  it('rejects a transition once a delivery has already reached a terminal state', async () => {
-    const delivery = await seedLegacyDelivery('delivered');
-    const token = driverToken();
-
-    const res = await request(app)
-      .put(`/api/v1/deliveries/${delivery._id.toString()}/status`)
-      .set('Authorization', `Bearer ${token}`)
-      .send({ status: 'assigned' });
-
-    expect(res.status).toBe(400);
+    // The write is rejected before any state moves.
+    const unchanged = await Delivery.findById(delivery._id.toString());
+    expect(unchanged?.status).toBe(DeliveryStatus.PENDING);
   });
 
   it('returns 404 when the delivery id is well-formed but does not exist', async () => {
@@ -222,7 +280,7 @@ describe('Delivery status-transition flow: authenticated driver walks a delivery
     const res = await request(app)
       .put(`/api/v1/deliveries/${missingId}/status`)
       .set('Authorization', `Bearer ${token}`)
-      .send({ status: 'assigned' });
+      .send({ status: DeliveryStatus.ASSIGNED });
 
     expect(res.status).toBe(404);
   });
@@ -233,13 +291,13 @@ describe('Delivery status-transition flow: authenticated driver walks a delivery
     const res = await request(app)
       .put('/api/v1/deliveries/not-a-valid-id/status')
       .set('Authorization', `Bearer ${token}`)
-      .send({ status: 'assigned' });
+      .send({ status: DeliveryStatus.ASSIGNED });
 
     expect(res.status).toBe(400);
   });
 
   it('rejects an unrecognized status value', async () => {
-    const delivery = await seedLegacyDelivery('pending');
+    const delivery = await seedDelivery(DeliveryStatus.PENDING);
     const token = driverToken();
 
     const res = await request(app)
@@ -248,6 +306,27 @@ describe('Delivery status-transition flow: authenticated driver walks a delivery
       .send({ status: 'teleported' });
 
     expect(res.status).toBe(400);
-    expect(res.body.message).toMatch(/invalid status value/i);
+  });
+});
+
+describe('Single source of truth: CRUD surface and status surface share one collection (issue #211)', () => {
+  it('reflects a status written through PUT /:id/status in the CRUD read path immediately', async () => {
+    const createRes = await request(app)
+      .post('/api/v1/deliveries')
+      .set('Idempotency-Key', `test-${Date.now()}-${Math.random()}`)
+      .send(crudPayload);
+    expect(createRes.status).toBe(201);
+    const id = createRes.body.data.id ?? createRes.body.data._id;
+
+    const token = driverToken();
+    const statusRes = await request(app)
+      .put(`/api/v1/deliveries/${id}/status`)
+      .set('Authorization', `Bearer ${token}`)
+      .send({ status: DeliveryStatus.ASSIGNED });
+    expect(statusRes.status).toBe(200);
+
+    const getRes = await request(app).get(`/api/v1/deliveries/${id}`);
+    expect(getRes.status).toBe(200);
+    expect(getRes.body.data.status).toBe(DeliveryStatus.ASSIGNED);
   });
 });

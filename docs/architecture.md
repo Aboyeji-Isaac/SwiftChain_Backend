@@ -182,16 +182,15 @@ SwiftChain_Backend/
 │   │   ├── socketMetricsService.ts    # Socket.IO connection metrics
 │   │   ├── gracefulShutdownService.ts # Graceful shutdown helper
 │   │   ├── dlqService.ts          # Dead Letter Queue management
-│   │   ├── eventPoller.ts         # ⚠ STUB — event polling placeholder
+│   │   ├── eventPoller.ts         # continuous getEvents loop: EventLog ingestion + dispatch
 │   │   ├── healthService.ts       # System health checks
 │   │   └── push/                  # Push notification providers
 │   │       ├── pushProvider.ts    # Provider interface
 │   │       └── fcmProvider.ts     # Firebase Cloud Messaging implementation
 │   │
 │   ├── controllers/               # HTTP request handlers
-│   │   ├── delivery.controller.ts # Full delivery CRUD (uses delivery.service.ts)
-│   │   ├── deliveryController.ts  # ⚠ DEPRECATED — ETA endpoint only
-│   │   ├── deliveryCrudController.ts  # ⚠ DEPRECATED — basic CRUD exports
+│   │   ├── delivery.controller.ts # Canonical delivery controller (CRUD + ETA, uses delivery.service.ts)
+│   │   ├── deliveryController.ts  # ⚠ DEPRECATED — compatibility shim re-exporting delivery.controller.ts
 │   │   ├── deliveryStatusController.ts # Status transitions
 │   │   ├── escrow.controller.ts   # Escrow by delivery/contract + fund trigger
 │   │   ├── escrowController.ts    # ⚠ DEPRECATED — admin flagged escrows
@@ -725,7 +724,7 @@ flowchart TD
     A[server.ts startup] -->|NODE_ENV != test| B[startEscrowMonitorJob]
     A -->|NODE_ENV != test| C[startWebhookRetryJob]
     A -->|NODE_ENV != test| D[startAutoAssignmentJob]
-    A -->|NODE_ENV != test| E[startEventPoller - stub]
+    A -->|NODE_ENV != test| E[startEventPoller]
 
     B --> F{ESCROW_MONITOR_CRON\ndefault: every 5 min}
     F -->|tick| G{isRunning?}
@@ -760,8 +759,9 @@ flowchart TD
 All cron expressions are configurable via environment variables. All jobs are stopped during
 graceful shutdown by calling `stopXxx()` before the process exits.
 
-**Note:** `startEventPoller` / `stopEventPoller` (`services/eventPoller.ts`) are stubs that only
-log messages — the full polling implementation is not yet built.
+**Note:** `startEventPoller` / `stopEventPoller` (`services/eventPoller.ts`) run the escrow
+`getEvents` poller: it records events in `EventLog`, dispatches them to handlers and advances
+`IndexerStatus`. See `backend/docs/indexer.md` (Event Poller).
 
 ---
 
@@ -811,9 +811,8 @@ RPC node to detect indexer lag and raise `IndexerAlert` documents when threshold
 payload is written to `DlqEntry`. The admin can list DLQ entries and trigger a retry via
 `dlqService.retryEntry`, which replays the payload through `stellarService.submitEscrowLock`.
 
-**`eventPoller.ts`** is a **stub** (`startEventPoller` / `stopEventPoller` only log). A
-continuous polling loop that advances `lastProcessedLedger` and feeds events to the handlers
-is planned but not yet implemented.
+**`eventPoller.ts`** runs a continuous polling loop that reads `escrow_funded` events, deduplicates
+them in `EventLog`, dispatches them to the escrow handler, and advances `lastProcessedLedger`.
 
 ---
 
@@ -865,9 +864,8 @@ New routes should use the middleware in `src/middlewares/`.
 
 | Status | File | Usage |
 |---|---|---|
-| Active | `src/controllers/delivery.controller.ts` | Full delivery CRUD via `delivery.service.ts` |
-| **DEPRECATED** | `src/controllers/deliveryController.ts` | ETA endpoint only (`GET /:id/eta`), wires to legacy `deliveryService` |
-| **DEPRECATED** | `src/controllers/deliveryCrudController.ts` | Exports `createDelivery`, `getDeliveries`, `getDeliveryById`, `assignDriver` as standalone functions |
+| Active | `src/controllers/delivery.controller.ts` | Full delivery CRUD (incl. `GET /:id/eta`) via `delivery.service.ts` |
+| **DEPRECATED** | `src/controllers/deliveryController.ts` | Compatibility shim — re-exports the canonical controller from `delivery.controller.ts` |
 
 #### Routes
 
@@ -912,11 +910,11 @@ but is retained for reference.
 
 ---
 
-### 10.5 Indexer: Stub
+### 10.5 Indexer
 
 | Status | File | Description |
 |---|---|---|
-| Stub | `src/services/eventPoller.ts` | `startEventPoller` and `stopEventPoller` only log messages; no polling logic is implemented |
+| Implemented | `src/services/eventPoller.ts` | Polls `getEvents` for `escrow_funded`, records `EventLog` entries, dispatches to handlers, advances `IndexerStatus` |
 
 ---
 

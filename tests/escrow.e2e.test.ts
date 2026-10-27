@@ -255,7 +255,7 @@ describe('Escrow Lifecycle E2E Tests', () => {
         contractId: testEscrow.contractId!,
         deliveryId: testDelivery._id.toString(),
         amount: 999,
-        asset: 'USDC',
+        asset: 'XLM',
         fundedBy: 'GDIFFERENT',
         transactionHash: testEscrow.transactions[0].hash,
         ledger: 200000,
@@ -854,18 +854,17 @@ describe('Escrow Lifecycle E2E Tests', () => {
       expect(escrow1.transactions[0].hash).toBe(txHash);
 
       // Attempt to fund second escrow with same transaction hash
-      // This should either skip or throw depending on implementation
-      const escrow2 = await escrowService.recordEscrowFunded({
-        contractId: `CESCROW-2`,
-        deliveryId: delivery2._id.toString(),
-        amount: 50,
-        asset: 'USDC',
-        transactionHash: txHash,
-        ledger: 100001,
-      });
-
-      // Verify escrow2 was created (service allows it, but DB schema should prevent duplicates)
-      expect(escrow2).toBeDefined();
+      // Schema enforces unique transaction hash across all escrows
+      await expect(
+        escrowService.recordEscrowFunded({
+          contractId: `CESCROW-2`,
+          deliveryId: delivery2._id.toString(),
+          amount: 50,
+          asset: 'XLM',
+          transactionHash: txHash,
+          ledger: 100001,
+        }),
+      ).rejects.toThrow();
     });
   });
 

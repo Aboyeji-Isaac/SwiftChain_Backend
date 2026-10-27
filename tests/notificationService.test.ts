@@ -407,7 +407,7 @@ describe('NotificationService', () => {
       await service.notifyDeliveryTransition(delivery, DeliveryStatus.IN_PROGRESS);
       await service.notifyDeliveryTransition(delivery, DeliveryStatus.COMPLETED);
 
-      const page = await service.listForUser(userId, 1, 10);
+      const page = await service.listForUser(userId, { page: 1, limit: 10 });
 
       expect(page.total).toBe(3);
       expect(page.data[0].event).toBe(NotificationEvent.DELIVERY_COMPLETED);
@@ -420,7 +420,7 @@ describe('NotificationService', () => {
       await service.notifyDeliveryTransition(delivery, DeliveryStatus.PENDING);
       await service.notifyDeliveryTransition(delivery, DeliveryStatus.COMPLETED);
 
-      const page = await service.listForUser(userId, 1, 1);
+      const page = await service.listForUser(userId, { page: 1, limit: 1 });
 
       expect(page.data).toHaveLength(1);
       expect(page.total).toBe(2);

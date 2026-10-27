@@ -7,7 +7,6 @@ import { stopIndexerLagMonitor } from './monitorService';
 import { stopEscrowMonitorService } from './escrowMonitorService';
 import { stopEventPoller } from './eventPoller';
 import { shutdownSocketServer, TypedServer } from '../sockets/connectionHandler';
-import env from '../config/env';
 
 /** Polling interval while waiting for in-flight HTTP / DB work to finish. */
 const DRAIN_POLL_MS = 100;

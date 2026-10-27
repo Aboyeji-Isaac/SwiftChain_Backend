@@ -1,10 +1,10 @@
 import { Router } from 'express';
 import authenticate from '../middleware/authenticate';
 import validate from '../middleware/validate';
+import { buildQueryOptions } from '../middlewares/queryMiddleware';
 import {
   getPreferences,
   listNotifications,
-  listNotificationsSchema,
   registerDevice,
   registerDeviceSchema,
   unregisterDevice,
@@ -26,7 +26,19 @@ router.use(authenticate);
  * @desc    Paginated notification history for the authenticated user
  * @access  Private
  */
-router.get('/', validate({ query: listNotificationsSchema }), listNotifications);
+router.get(
+  '/',
+  buildQueryOptions({
+    sortableFields: ['createdAt'],
+    filterableFields: {
+      status: 'string',
+      event: 'string',
+    },
+    defaultSort: { createdAt: -1 },
+    defaultLimit: 20,
+  }),
+  listNotifications,
+);
 
 /**
  * @route   GET /api/v1/notifications/preferences

@@ -185,17 +185,9 @@ export class ProfilePictureService {
 
     logger.info(`[ProfilePicture] Profile updated — userId=${userId} url=${uploadResult.url}`);
 
-    // ── 8. TODO: Cleanup old profile picture ─────────────────────────────────
-    // In a production system, you'd want to delete the old profile picture
-    // from storage to avoid accumulating unused files. This could be done:
-    // - Synchronously here (simple but adds latency)
-    // - Asynchronously via a background job (recommended)
-    // - Via a scheduled cleanup job that removes orphaned files
-    if (oldProfilePictureKey) {
-      logger.debug(
-        `[ProfilePicture] Old profile picture marked for cleanup — key=${oldProfilePictureKey}`,
-      );
-      // TODO: Implement cleanup logic
+    // ── 8. Cleanup old profile picture ───────────────────────────────────────
+    if (oldProfilePictureKey && oldProfilePictureKey !== uploadResult.key) {
+      await this.removeStoredFile(oldProfilePictureKey, userId);
     }
 
     return {
@@ -236,10 +228,41 @@ export class ProfilePictureService {
 
     logger.info(`[ProfilePicture] Profile picture removed — userId=${userId} key=${oldKey}`);
 
-    // TODO: Implement actual file deletion from storage
-    logger.debug(`[ProfilePicture] Old file marked for cleanup — key=${oldKey}`);
+    await this.removeStoredFile(oldKey, userId);
 
     return true;
+  }
+
+  /**
+   * Delete the stored profile picture of a user being removed. The user
+   * document itself is handled by the caller (soft delete).
+   */
+  public async cleanupForDeletedUser(userId: string): Promise<void> {
+    const user = await User.findById(userId).select('profilePictureKey');
+    if (!user?.profilePictureKey) return;
+
+    const key = user.profilePictureKey;
+    user.profilePicture = undefined;
+    user.profilePictureKey = undefined;
+    await user.save();
+
+    await this.removeStoredFile(key, userId);
+  }
+
+  /**
+   * Remove a file from the active storage driver. Failures are logged and
+   * swallowed so a storage outage never fails the user-facing request.
+   */
+  private async removeStoredFile(key: string, userId: string): Promise<void> {
+    try {
+      await getStorageDriver().delete(key);
+      logger.info(`[ProfilePicture] Old file deleted — userId=${userId} key=${key}`);
+    } catch (error) {
+      const message = error instanceof Error ? error.message : 'Unknown error';
+      logger.error(
+        `[ProfilePicture] Failed to delete old file — userId=${userId} key=${key}: ${message}`,
+      );
+    }
   }
 
   /**

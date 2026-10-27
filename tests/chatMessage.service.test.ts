@@ -1,15 +1,15 @@
 /**
- * Unit tests for ChatMessageService and the socket transport adapter.
+ * Unit tests for ChatMessageService.
  *
- * The point of the refactor these cover is that the chat logic no longer needs
- * a running Socket.IO server to be tested: ChatMessageService is exercised
- * directly against a real in-process MongoDB, and the adapter is checked
- * against lightweight socket doubles that only record emitted events.
+ * The chat logic does not need a running Socket.IO server to be tested:
+ * ChatMessageService is exercised directly against a real in-process MongoDB.
+ * (The socket transport adapter that used to be covered here was removed with
+ * the dead dedicated socket server — see issue #212 — the service layer is
+ * the durable part.)
  */
 
 import mongoose from 'mongoose';
 import { MongoMemoryServer } from 'mongodb-memory-server';
-import type { Namespace, Socket } from 'socket.io';
 import ChatMessage from '../src/models/ChatMessage';
 import {
   ChatMessageService,
@@ -17,7 +17,6 @@ import {
   MAX_MESSAGE_LENGTH,
   RECENT_MESSAGE_LIMIT,
 } from '../src/sockets/chatMessage.service';
-import { SocketService } from '../src/sockets/socketService';
 
 jest.mock('../src/config/logger', () => ({
   info: jest.fn(),
@@ -25,34 +24,6 @@ jest.mock('../src/config/logger', () => ({
   error: jest.fn(),
   debug: jest.fn(),
 }));
-
-/** Records every event emitted to a single socket. */
-const createSocketDouble = (): Socket & { emitted: Array<{ event: string; payload: unknown }> } => {
-  const emitted: Array<{ event: string; payload: unknown }> = [];
-  return {
-    id: 'socket-test',
-    emit: (event: string, payload: unknown) => {
-      emitted.push({ event, payload });
-      return true;
-    },
-    emitted,
-  } as unknown as Socket & { emitted: Array<{ event: string; payload: unknown }> };
-};
-
-/** Records every event broadcast to a namespace. */
-const createNamespaceDouble = (): Namespace & {
-  emitted: Array<{ event: string; payload: unknown }>;
-} => {
-  const emitted: Array<{ event: string; payload: unknown }> = [];
-  return {
-    name: '/test',
-    emit: (event: string, payload: unknown) => {
-      emitted.push({ event, payload });
-      return true;
-    },
-    emitted,
-  } as unknown as Namespace & { emitted: Array<{ event: string; payload: unknown }> };
-};
 
 describe('ChatMessageService', () => {
   let mongod: MongoMemoryServer;
@@ -191,80 +162,5 @@ describe('ChatMessageService', () => {
     it('returns an empty transcript when there are no messages', async () => {
       await expect(service.getRecentTranscript()).resolves.toEqual([]);
     });
-  });
-});
-
-describe('SocketService (transport adapter)', () => {
-  let mongod: MongoMemoryServer;
-  let adapter: SocketService;
-
-  beforeAll(async () => {
-    mongod = await MongoMemoryServer.create();
-    await mongoose.connect(mongod.getUri());
-    adapter = new SocketService();
-  }, 60_000);
-
-  afterAll(async () => {
-    await mongoose.disconnect();
-    await mongod.stop();
-  }, 30_000);
-
-  afterEach(async () => {
-    await ChatMessage.deleteMany({});
-  });
-
-  it('replays the transcript to a connecting client', async () => {
-    await new ChatMessageService().createMessage({ content: 'earlier' });
-
-    const socket = createSocketDouble();
-    await adapter.handleConnection(socket, createNamespaceDouble());
-
-    expect(socket.emitted).toHaveLength(1);
-    expect(socket.emitted[0].event).toBe('recentMessages');
-    expect(socket.emitted[0].payload).toHaveLength(1);
-  });
-
-  it('broadcasts a valid message to the namespace', async () => {
-    const nsp = createNamespaceDouble();
-    const socket = createSocketDouble();
-
-    await adapter.handleIncomingMessage(nsp, { content: 'hello' }, socket);
-
-    expect(nsp.emitted).toHaveLength(1);
-    expect(nsp.emitted[0].event).toBe('message');
-    await expect(ChatMessage.countDocuments({})).resolves.toBe(1);
-  });
-
-  it('tells the sender why an invalid message was rejected', async () => {
-    const nsp = createNamespaceDouble();
-    const socket = createSocketDouble();
-
-    await adapter.handleIncomingMessage(nsp, { content: '' }, socket);
-
-    // Nothing is broadcast, and the sender learns the reason rather than
-    // seeing its message vanish silently.
-    expect(nsp.emitted).toHaveLength(0);
-    expect(socket.emitted[0].event).toBe('error');
-    expect(socket.emitted[0].payload).toMatchObject({ message: expect.stringMatching(/empty/i) });
-    await expect(ChatMessage.countDocuments({})).resolves.toBe(0);
-  });
-
-  it('does not throw when no originating socket is supplied', async () => {
-    const nsp = createNamespaceDouble();
-
-    await expect(adapter.handleIncomingMessage(nsp, { content: '' })).resolves.toBeUndefined();
-    expect(nsp.emitted).toHaveLength(0);
-  });
-
-  it('reports a transcript read failure to that client alone', async () => {
-    const failing = new ChatMessageService({
-      findRecent: jest.fn().mockRejectedValue(new Error('database unavailable')),
-    } as never);
-    const failingAdapter = new SocketService(failing);
-    const socket = createSocketDouble();
-
-    await failingAdapter.handleConnection(socket, createNamespaceDouble());
-
-    expect(socket.emitted[0].event).toBe('error');
   });
 });

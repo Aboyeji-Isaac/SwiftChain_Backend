@@ -6,11 +6,10 @@ import {
   Transaction,
   TransactionBuilder,
   nativeToScVal,
-  rpc as StellarRpc,
 } from '@stellar/stellar-sdk';
 import { StatusCodes } from 'http-status-codes';
 import CircuitBreaker from 'opossum';
-import { sorobanRpcClient, stellarConfig } from '../config/stellar';
+import { stellarConfig } from '../config/stellar';
 import { deliveryService } from './delivery.service';
 import { DeliveryStatus, IDelivery } from '../models/Delivery';
 import { fromStroops, toStroops } from '../utils/stroops';
@@ -18,6 +17,8 @@ import AppError from '../utils/AppError';
 import logger from '../config/logger';
 import env from '../config/env';
 import { createCircuitBreaker, fireWithBreaker } from '../utils/circuitBreaker';
+import type { ISorobanRpcClient } from './providers/sorobanRpcClient';
+import { defaultSorobanRpcClient } from './providers/adapters';
 
 /** Input accepted by {@link TransactionService.buildEscrowLockXdr}. */
 export interface EscrowLockXdrInput {
@@ -77,10 +78,10 @@ const NON_LOCKABLE_STATUSES: ReadonlySet<DeliveryStatus> = new Set([
  *   without waiting for a TCP timeout.
  */
 export class TransactionService {
-  private readonly client: StellarRpc.Server;
+  private readonly client: ISorobanRpcClient;
   private readonly breaker: CircuitBreaker<[() => Promise<unknown>], unknown>;
 
-  constructor(client: StellarRpc.Server = sorobanRpcClient) {
+  constructor(client: ISorobanRpcClient = defaultSorobanRpcClient) {
     this.client = client;
 
     // A dedicated breaker for transaction-building RPC calls.  We use a

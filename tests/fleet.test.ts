@@ -50,6 +50,20 @@ afterAll(async () => {
 
 const JWT_SECRET = 'test-secret-key-16chars';
 
+let treasurySequence = 0;
+
+/** Unique, format-valid treasury address (the treasury index is unique). */
+const newTreasuryAddress = (): string => `G${String(++treasurySequence).padStart(55, '0')}`;
+
+const BUSINESS_METADATA = { companyName: 'City Logistics Ltd', contactEmail: 'ops@example.com' };
+
+const validFleetBody = (overrides: Record<string, unknown> = {}): Record<string, unknown> => ({
+  name: 'Default Fleet',
+  treasuryAddress: newTreasuryAddress(),
+  businessMetadata: BUSINESS_METADATA,
+  ...overrides,
+});
+
 const signToken = (userId: string): string => jwt.sign({ userId }, JWT_SECRET, { expiresIn: '1h' });
 
 const createUser = async (
@@ -87,7 +101,7 @@ describe('POST /api/v1/fleets', () => {
       const res = await request(app)
         .post('/api/v1/fleets')
         .set('Authorization', `Bearer ${token}`)
-        .send({ name: 'City Logistics Fleet' });
+        .send(validFleetBody({ name: 'City Logistics Fleet' }));
 
       expect(res.status).toBe(201);
       expect(res.body.success).toBe(true);
@@ -101,7 +115,7 @@ describe('POST /api/v1/fleets', () => {
       await request(app)
         .post('/api/v1/fleets')
         .set('Authorization', `Bearer ${token}`)
-        .send({ name: 'Persisted Fleet' });
+        .send(validFleetBody({ name: 'Persisted Fleet' }));
 
       const fleet = await Fleet.findOne({ name: 'Persisted Fleet' });
       expect(fleet).not.toBeNull();
@@ -116,7 +130,7 @@ describe('POST /api/v1/fleets', () => {
       const res = await request(app)
         .post('/api/v1/fleets')
         .set('Authorization', `Bearer ${token}`)
-        .send({ name: '  Trimmed Fleet  ' });
+        .send(validFleetBody({ name: '  Trimmed Fleet  ' }));
 
       expect(res.body.data.fleet.name).toBe('Trimmed Fleet');
     });
@@ -142,7 +156,7 @@ describe('POST /api/v1/fleets', () => {
       const res = await request(app)
         .post('/api/v1/fleets')
         .set('Authorization', `Bearer ${token}`)
-        .send({ name: 'A' });
+        .send(validFleetBody({ name: 'A' }));
 
       expect(res.status).toBe(400);
     });
@@ -150,7 +164,9 @@ describe('POST /api/v1/fleets', () => {
 
   describe('401 – authentication errors', () => {
     it('returns 401 when no Authorization header is provided', async () => {
-      const res = await request(app).post('/api/v1/fleets').send({ name: 'No Auth Fleet' });
+      const res = await request(app)
+        .post('/api/v1/fleets')
+        .send(validFleetBody({ name: 'No Auth Fleet' }));
       expect(res.status).toBe(401);
     });
   });
@@ -163,7 +179,7 @@ describe('POST /api/v1/fleets', () => {
       const res = await request(app)
         .post('/api/v1/fleets')
         .set('Authorization', `Bearer ${token}`)
-        .send({ name: 'Unauthorized Fleet' });
+        .send(validFleetBody({ name: 'Unauthorized Fleet' }));
 
       expect(res.status).toBe(403);
     });
@@ -175,7 +191,7 @@ describe('POST /api/v1/fleets', () => {
       const res = await request(app)
         .post('/api/v1/fleets')
         .set('Authorization', `Bearer ${token}`)
-        .send({ name: 'Driver Fleet' });
+        .send(validFleetBody({ name: 'Driver Fleet' }));
 
       expect(res.status).toBe(403);
     });
@@ -189,12 +205,12 @@ describe('POST /api/v1/fleets', () => {
       await request(app)
         .post('/api/v1/fleets')
         .set('Authorization', `Bearer ${token}`)
-        .send({ name: 'Duplicate Fleet' });
+        .send(validFleetBody({ name: 'Duplicate Fleet' }));
 
       const res = await request(app)
         .post('/api/v1/fleets')
         .set('Authorization', `Bearer ${token}`)
-        .send({ name: 'Duplicate Fleet' });
+        .send(validFleetBody({ name: 'Duplicate Fleet' }));
 
       expect(res.status).toBe(409);
     });
@@ -208,11 +224,11 @@ describe('POST /api/v1/fleets', () => {
       const resA = await request(app)
         .post('/api/v1/fleets')
         .set('Authorization', `Bearer ${tokenA}`)
-        .send({ name: 'Shared Name Fleet' });
+        .send(validFleetBody({ name: 'Shared Name Fleet' }));
       const resB = await request(app)
         .post('/api/v1/fleets')
         .set('Authorization', `Bearer ${tokenB}`)
-        .send({ name: 'Shared Name Fleet' });
+        .send(validFleetBody({ name: 'Shared Name Fleet' }));
 
       expect(resA.status).toBe(201);
       expect(resB.status).toBe(201);
@@ -228,7 +244,12 @@ describe('POST /api/v1/fleets/:id/invite', () => {
       const owner = await createUser({ role: UserRole.ENTERPRISE });
       const driver = await createUser({ role: UserRole.DRIVER });
       const token = signToken(owner._id.toString());
-      const fleet = await Fleet.create({ name: 'Invite Fleet', ownerId: owner._id });
+      const fleet = await Fleet.create({
+        name: 'Invite Fleet',
+        ownerId: owner._id,
+        treasuryAddress: newTreasuryAddress(),
+        businessMetadata: BUSINESS_METADATA,
+      });
 
       const res = await request(app)
         .post(`/api/v1/fleets/${fleet._id}/invite`)
@@ -243,7 +264,12 @@ describe('POST /api/v1/fleets/:id/invite', () => {
       const owner = await createUser({ role: UserRole.ENTERPRISE });
       const driver = await createUser({ role: UserRole.DRIVER });
       const token = signToken(owner._id.toString());
-      const fleet = await Fleet.create({ name: 'Persisted Invite Fleet', ownerId: owner._id });
+      const fleet = await Fleet.create({
+        name: 'Persisted Invite Fleet',
+        ownerId: owner._id,
+        treasuryAddress: newTreasuryAddress(),
+        businessMetadata: BUSINESS_METADATA,
+      });
 
       await request(app)
         .post(`/api/v1/fleets/${fleet._id}/invite`)
@@ -263,7 +289,12 @@ describe('POST /api/v1/fleets/:id/invite', () => {
     it('returns 400 when driverId is missing', async () => {
       const owner = await createUser({ role: UserRole.ENTERPRISE });
       const token = signToken(owner._id.toString());
-      const fleet = await Fleet.create({ name: 'No Driver Fleet', ownerId: owner._id });
+      const fleet = await Fleet.create({
+        name: 'No Driver Fleet',
+        ownerId: owner._id,
+        treasuryAddress: newTreasuryAddress(),
+        businessMetadata: BUSINESS_METADATA,
+      });
 
       const res = await request(app)
         .post(`/api/v1/fleets/${fleet._id}/invite`)
@@ -276,7 +307,12 @@ describe('POST /api/v1/fleets/:id/invite', () => {
     it('returns 400 when driverId is not a valid ObjectId', async () => {
       const owner = await createUser({ role: UserRole.ENTERPRISE });
       const token = signToken(owner._id.toString());
-      const fleet = await Fleet.create({ name: 'Bad Driver Id Fleet', ownerId: owner._id });
+      const fleet = await Fleet.create({
+        name: 'Bad Driver Id Fleet',
+        ownerId: owner._id,
+        treasuryAddress: newTreasuryAddress(),
+        businessMetadata: BUSINESS_METADATA,
+      });
 
       const res = await request(app)
         .post(`/api/v1/fleets/${fleet._id}/invite`)
@@ -293,7 +329,12 @@ describe('POST /api/v1/fleets/:id/invite', () => {
       const otherEnterprise = await createUser({ role: UserRole.ENTERPRISE });
       const driver = await createUser({ role: UserRole.DRIVER });
       const token = signToken(otherEnterprise._id.toString());
-      const fleet = await Fleet.create({ name: 'Owned By Someone Else', ownerId: owner._id });
+      const fleet = await Fleet.create({
+        name: 'Owned By Someone Else',
+        ownerId: owner._id,
+        treasuryAddress: newTreasuryAddress(),
+        businessMetadata: BUSINESS_METADATA,
+      });
 
       const res = await request(app)
         .post(`/api/v1/fleets/${fleet._id}/invite`)
@@ -322,7 +363,12 @@ describe('POST /api/v1/fleets/:id/invite', () => {
     it('returns 404 when the invited driver does not exist', async () => {
       const owner = await createUser({ role: UserRole.ENTERPRISE });
       const token = signToken(owner._id.toString());
-      const fleet = await Fleet.create({ name: 'Ghost Driver Fleet', ownerId: owner._id });
+      const fleet = await Fleet.create({
+        name: 'Ghost Driver Fleet',
+        ownerId: owner._id,
+        treasuryAddress: newTreasuryAddress(),
+        businessMetadata: BUSINESS_METADATA,
+      });
       const nonExistentDriverId = new mongoose.Types.ObjectId().toString();
 
       const res = await request(app)
@@ -339,7 +385,12 @@ describe('POST /api/v1/fleets/:id/invite', () => {
       const owner = await createUser({ role: UserRole.ENTERPRISE });
       const notADriver = await createUser({ role: UserRole.USER });
       const token = signToken(owner._id.toString());
-      const fleet = await Fleet.create({ name: 'Not A Driver Fleet', ownerId: owner._id });
+      const fleet = await Fleet.create({
+        name: 'Not A Driver Fleet',
+        ownerId: owner._id,
+        treasuryAddress: newTreasuryAddress(),
+        businessMetadata: BUSINESS_METADATA,
+      });
 
       const res = await request(app)
         .post(`/api/v1/fleets/${fleet._id}/invite`)
@@ -355,7 +406,12 @@ describe('POST /api/v1/fleets/:id/invite', () => {
       const owner = await createUser({ role: UserRole.ENTERPRISE });
       const driver = await createUser({ role: UserRole.DRIVER });
       const token = signToken(owner._id.toString());
-      const fleet = await Fleet.create({ name: 'Double Invite Fleet', ownerId: owner._id });
+      const fleet = await Fleet.create({
+        name: 'Double Invite Fleet',
+        ownerId: owner._id,
+        treasuryAddress: newTreasuryAddress(),
+        businessMetadata: BUSINESS_METADATA,
+      });
 
       await request(app)
         .post(`/api/v1/fleets/${fleet._id}/invite`)
@@ -377,6 +433,8 @@ describe('POST /api/v1/fleets/:id/invite', () => {
       const fleet = await Fleet.create({
         name: 'Already Member Fleet',
         ownerId: owner._id,
+        treasuryAddress: newTreasuryAddress(),
+        businessMetadata: BUSINESS_METADATA,
         drivers: [driver._id],
       });
 
@@ -398,7 +456,12 @@ describe('PATCH /api/v1/fleets/invitations/:invitationId', () => {
       const owner = await createUser({ role: UserRole.ENTERPRISE });
       const driver = await createUser({ role: UserRole.DRIVER });
       const driverToken = signToken(driver._id.toString());
-      const fleet = await Fleet.create({ name: 'Accept Fleet', ownerId: owner._id });
+      const fleet = await Fleet.create({
+        name: 'Accept Fleet',
+        ownerId: owner._id,
+        treasuryAddress: newTreasuryAddress(),
+        businessMetadata: BUSINESS_METADATA,
+      });
       const invitation = await FleetInvitation.create({
         fleetId: fleet._id,
         driverId: driver._id,
@@ -423,7 +486,12 @@ describe('PATCH /api/v1/fleets/invitations/:invitationId', () => {
       const owner = await createUser({ role: UserRole.ENTERPRISE });
       const driver = await createUser({ role: UserRole.DRIVER });
       const driverToken = signToken(driver._id.toString());
-      const fleet = await Fleet.create({ name: 'Decline Fleet', ownerId: owner._id });
+      const fleet = await Fleet.create({
+        name: 'Decline Fleet',
+        ownerId: owner._id,
+        treasuryAddress: newTreasuryAddress(),
+        businessMetadata: BUSINESS_METADATA,
+      });
       const invitation = await FleetInvitation.create({
         fleetId: fleet._id,
         driverId: driver._id,
@@ -448,7 +516,12 @@ describe('PATCH /api/v1/fleets/invitations/:invitationId', () => {
       const owner = await createUser({ role: UserRole.ENTERPRISE });
       const driver = await createUser({ role: UserRole.DRIVER });
       const driverToken = signToken(driver._id.toString());
-      const fleet = await Fleet.create({ name: 'Bad Accept Fleet', ownerId: owner._id });
+      const fleet = await Fleet.create({
+        name: 'Bad Accept Fleet',
+        ownerId: owner._id,
+        treasuryAddress: newTreasuryAddress(),
+        businessMetadata: BUSINESS_METADATA,
+      });
       const invitation = await FleetInvitation.create({
         fleetId: fleet._id,
         driverId: driver._id,
@@ -470,7 +543,12 @@ describe('PATCH /api/v1/fleets/invitations/:invitationId', () => {
       const driver = await createUser({ role: UserRole.DRIVER });
       const otherDriver = await createUser({ role: UserRole.DRIVER });
       const otherDriverToken = signToken(otherDriver._id.toString());
-      const fleet = await Fleet.create({ name: 'Wrong Driver Fleet', ownerId: owner._id });
+      const fleet = await Fleet.create({
+        name: 'Wrong Driver Fleet',
+        ownerId: owner._id,
+        treasuryAddress: newTreasuryAddress(),
+        businessMetadata: BUSINESS_METADATA,
+      });
       const invitation = await FleetInvitation.create({
         fleetId: fleet._id,
         driverId: driver._id,
@@ -489,7 +567,12 @@ describe('PATCH /api/v1/fleets/invitations/:invitationId', () => {
       const owner = await createUser({ role: UserRole.ENTERPRISE });
       const driver = await createUser({ role: UserRole.DRIVER });
       const ownerToken = signToken(owner._id.toString());
-      const fleet = await Fleet.create({ name: 'Enterprise Respond Fleet', ownerId: owner._id });
+      const fleet = await Fleet.create({
+        name: 'Enterprise Respond Fleet',
+        ownerId: owner._id,
+        treasuryAddress: newTreasuryAddress(),
+        businessMetadata: BUSINESS_METADATA,
+      });
       const invitation = await FleetInvitation.create({
         fleetId: fleet._id,
         driverId: driver._id,
@@ -525,7 +608,12 @@ describe('PATCH /api/v1/fleets/invitations/:invitationId', () => {
       const owner = await createUser({ role: UserRole.ENTERPRISE });
       const driver = await createUser({ role: UserRole.DRIVER });
       const driverToken = signToken(driver._id.toString());
-      const fleet = await Fleet.create({ name: 'Already Responded Fleet', ownerId: owner._id });
+      const fleet = await Fleet.create({
+        name: 'Already Responded Fleet',
+        ownerId: owner._id,
+        treasuryAddress: newTreasuryAddress(),
+        businessMetadata: BUSINESS_METADATA,
+      });
       const invitation = await FleetInvitation.create({
         fleetId: fleet._id,
         driverId: driver._id,
@@ -551,7 +639,12 @@ describe('GET /api/v1/fleets/:id/metrics', () => {
     it('returns zeroed metrics for a fleet with no drivers', async () => {
       const owner = await createUser({ role: UserRole.ENTERPRISE });
       const token = signToken(owner._id.toString());
-      const fleet = await Fleet.create({ name: 'Empty Fleet', ownerId: owner._id });
+      const fleet = await Fleet.create({
+        name: 'Empty Fleet',
+        ownerId: owner._id,
+        treasuryAddress: newTreasuryAddress(),
+        businessMetadata: BUSINESS_METADATA,
+      });
 
       const res = await request(app)
         .get(`/api/v1/fleets/${fleet._id}/metrics`)
@@ -564,6 +657,7 @@ describe('GET /api/v1/fleets/:id/metrics', () => {
         totalDeliveries: 0,
         completedDeliveries: 0,
         totalEscrowValue: 0,
+        totalEscrowValueAsset: 'XLM',
       });
     });
 
@@ -575,6 +669,8 @@ describe('GET /api/v1/fleets/:id/metrics', () => {
       const fleet = await Fleet.create({
         name: 'Metrics Fleet',
         ownerId: owner._id,
+        treasuryAddress: newTreasuryAddress(),
+        businessMetadata: BUSINESS_METADATA,
         drivers: [driverA._id, driverB._id],
       });
 
@@ -630,7 +726,12 @@ describe('GET /api/v1/fleets/:id/metrics', () => {
       const owner = await createUser({ role: UserRole.ENTERPRISE });
       const otherEnterprise = await createUser({ role: UserRole.ENTERPRISE });
       const token = signToken(otherEnterprise._id.toString());
-      const fleet = await Fleet.create({ name: 'Private Metrics Fleet', ownerId: owner._id });
+      const fleet = await Fleet.create({
+        name: 'Private Metrics Fleet',
+        ownerId: owner._id,
+        treasuryAddress: newTreasuryAddress(),
+        businessMetadata: BUSINESS_METADATA,
+      });
 
       const res = await request(app)
         .get(`/api/v1/fleets/${fleet._id}/metrics`)
@@ -643,7 +744,12 @@ describe('GET /api/v1/fleets/:id/metrics', () => {
       const owner = await createUser({ role: UserRole.ENTERPRISE });
       const driver = await createUser({ role: UserRole.DRIVER });
       const token = signToken(driver._id.toString());
-      const fleet = await Fleet.create({ name: 'Driver Blocked Fleet', ownerId: owner._id });
+      const fleet = await Fleet.create({
+        name: 'Driver Blocked Fleet',
+        ownerId: owner._id,
+        treasuryAddress: newTreasuryAddress(),
+        businessMetadata: BUSINESS_METADATA,
+      });
 
       const res = await request(app)
         .get(`/api/v1/fleets/${fleet._id}/metrics`)

@@ -1,7 +1,12 @@
 import fs from 'fs/promises';
 import path from 'path';
 import crypto from 'crypto';
-import { S3Client, PutObjectCommand, GetObjectCommand } from '@aws-sdk/client-s3';
+import {
+  S3Client,
+  PutObjectCommand,
+  GetObjectCommand,
+  DeleteObjectCommand,
+} from '@aws-sdk/client-s3';
 import { getSignedUrl } from '@aws-sdk/s3-request-presigner';
 import env from '../config/env';
 import logger from '../config/logger';
@@ -18,6 +23,8 @@ export interface StoredObject {
 export interface StorageDriver {
   /** Persist `buffer` under a unique key derived from `originalName` and return its URL. */
   upload(buffer: Buffer, originalName: string, mimeType: string): Promise<StoredObject>;
+  /** Remove the object stored under `key`. Missing objects are not an error. */
+  delete(key: string): Promise<void>;
 }
 
 // ─── Local disk driver ─────────────────────────────────────────────────────────
@@ -42,7 +49,7 @@ export class LocalStorageDriver implements StorageDriver {
     _mimeType: string,
   ): Promise<StoredObject> {
     const key = buildObjectKey(originalName);
-    const absolutePath = path.join(process.cwd(), this.uploadDir, key);
+    const absolutePath = this.resolveWithinRoot(key, 'write');
 
     await fs.mkdir(path.dirname(absolutePath), { recursive: true });
     await fs.writeFile(absolutePath, buffer);
@@ -52,6 +59,30 @@ export class LocalStorageDriver implements StorageDriver {
     logger.debug(`[Storage] Local upload written — key=${key}`);
 
     return { key, url };
+  }
+
+  public async delete(key: string): Promise<void> {
+    const absolutePath = this.resolveWithinRoot(key, 'delete');
+
+    try {
+      await fs.unlink(absolutePath);
+      logger.debug(`[Storage] Local object deleted — key=${key}`);
+    } catch (error) {
+      if ((error as NodeJS.ErrnoException).code !== 'ENOENT') throw error;
+    }
+  }
+
+  /**
+   * Resolve `key` against the upload root and refuse anything that escapes it
+   * (e.g. `../../etc/passwd`), for both reads/writes and deletes.
+   */
+  private resolveWithinRoot(key: string, action: 'write' | 'delete'): string {
+    const root = path.resolve(process.cwd(), this.uploadDir);
+    const absolutePath = path.resolve(root, key);
+    if (!absolutePath.startsWith(root + path.sep)) {
+      throw new Error(`Refusing to ${action} outside upload directory — key=${key}`);
+    }
+    return absolutePath;
   }
 }
 
@@ -104,6 +135,11 @@ export class S3StorageDriver implements StorageDriver {
     logger.debug(`[Storage] S3 upload written — bucket=${env.AWS_S3_BUCKET} key=${key}`);
 
     return { key, url };
+  }
+
+  public async delete(key: string): Promise<void> {
+    await this.client.send(new DeleteObjectCommand({ Bucket: env.AWS_S3_BUCKET, Key: key }));
+    logger.debug(`[Storage] S3 object deleted — bucket=${env.AWS_S3_BUCKET} key=${key}`);
   }
 }
 
