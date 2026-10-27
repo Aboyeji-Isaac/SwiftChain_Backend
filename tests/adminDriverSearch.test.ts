@@ -95,7 +95,16 @@ describe('AdminDriverRepository', () => {
 
   it.each([
     ['available', { 'driverLocation.isAvailable': true }],
-    ['unavailable', { 'driverLocation.isAvailable': false }],
+    [
+      'unavailable',
+      {
+        $or: [
+          { 'driverLocation.isAvailable': false },
+          { driverLocation: { $exists: false } },
+          { driverLocation: null },
+        ],
+      },
+    ],
     ['online', { 'driverLocation.status': 'online' }],
     [
       'offline',
