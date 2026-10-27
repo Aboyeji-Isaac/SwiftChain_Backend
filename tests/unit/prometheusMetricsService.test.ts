@@ -83,6 +83,6 @@ describe('PrometheusMetricsService', () => {
 
     const output = await prometheusMetricsService.render();
 
-    expect(output).toContain('route="/api/v1/items/\\\\"special\\\\""');
+    expect(output).toContain('route="/api/v1/items/' + '\\' + '"special' + '\\' + '""');
   });
 });
