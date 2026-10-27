@@ -30,6 +30,8 @@ const adminDriverQueryConfig: QueryFeatureConfig = {
     availability: 'string',
     minCompletedDeliveries: 'number',
     maxCompletedDeliveries: 'number',
+    minTotalDeliveries: 'number',
+    maxTotalDeliveries: 'number',
   },
   defaultSort: { createdAt: -1 },
   defaultLimit: 20,
@@ -74,6 +76,12 @@ router.use(requireRole(UserRole.ADMIN));
  *         schema: { type: integer, minimum: 0 }
  *       - in: query
  *         name: maxCompletedDeliveries
+ *         schema: { type: integer, minimum: 0 }
+ *       - in: query
+ *         name: minTotalDeliveries
+ *         schema: { type: integer, minimum: 0 }
+ *       - in: query
+ *         name: maxTotalDeliveries
  *         schema: { type: integer, minimum: 0 }
  *       - in: query
  *         name: page
