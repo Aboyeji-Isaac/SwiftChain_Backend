@@ -82,11 +82,14 @@ describe('AdminDriverRepository', () => {
       maxReputation: 900,
       minCompletedDeliveries: 5,
       maxCompletedDeliveries: 50,
+      minTotalDeliveries: 10,
+      maxTotalDeliveries: 100,
     });
     const match = pipeline[0].$match as Record<string, unknown>;
 
     expect(match.reputationPoints).toEqual({ $gte: 100, $lte: 900 });
     expect(match.completedDeliveries).toEqual({ $gte: 5, $lte: 50 });
+    expect(match.totalDeliveries).toEqual({ $gte: 10, $lte: 100 });
   });
 
   it.each([
