@@ -1,4 +1,4 @@
-import { PipelineStage } from 'mongoose';
+import { FilterQuery, PipelineStage } from 'mongoose';
 import DriverProfile from '../models/DriverProfile';
 import { DriverLocation } from '../models/DriverLocation';
 import User from '../models/User';
@@ -65,7 +65,7 @@ export class AdminDriverRepository {
     search?: string,
   ): Promise<AdminDriverSearchResult> {
     const rawFilter = (options.filter ?? {}) as Record<string, unknown>;
-    const profileMatch: Record<string, unknown> = { isDeleted: { $ne: true } };
+    const profileMatch: FilterQuery<Record<string, unknown>> = { isDeleted: { $ne: true } };
 
     if (rawFilter.tier !== undefined) {
       const tier = rawFilter.tier;
