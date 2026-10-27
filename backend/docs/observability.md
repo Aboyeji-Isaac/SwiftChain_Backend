@@ -266,7 +266,7 @@ The response includes stored webhook outcome fields; the precise document may al
 
 Configure INDEXER_LAG_WEBHOOK_URL to an HTTPS receiver that accepts POST requests with a JSON body. An empty value disables webhook delivery. The background monitor runs every INDEXER_LAG_CHECK_INTERVAL_MS (default 60,000 ms) and uses INDEXER_LAG_ALERT_THRESHOLD (default 100 ledgers). The alert condition is lagLedgers greater than the threshold, not greater-than-or-equal.
 
-The payload includes event=indexer_lag_alert plus network, processedLedger, networkLedger, lagLedgers, thresholdLedgers, breached, and checkedAt. The receiver should acknowledge successful delivery with a 2xx status. The current implementation does not add a signature or authorization header and does not automatically retry failed indexer-alert webhook deliveries. Use a trusted HTTPS endpoint, restrict outbound access where possible, and avoid placing secrets in the webhook URL. Failed notification details are recorded in the IndexerAlert webhookError field and in logs.
+The payload includes event=indexer_lag_alert plus network, processedLedger, networkLedger, lagLedgers, thresholdLedgers, breached, and checkedAt. The receiver should acknowledge successful delivery with a 2xx status. The current implementation does not add a signature or authorization header or a dedicated retry/backoff mechanism for failed indexer-alert webhook deliveries. A later monitor cycle may attempt another notification while the threshold remains breached. Use a trusted HTTPS endpoint, restrict outbound access where possible, and avoid placing secrets in the webhook URL. Failed notification details are recorded in the IndexerAlert webhookError field and in logs.
 
 The persisted IndexerAlert record is the audit trail: it records the network and ledger gap, the threshold, whether a webhook was configured, whether notification succeeded, and an error message when delivery failed. Retain and monitor these records independently of rotating log files.
 
@@ -311,7 +311,7 @@ Until request-ID middleware is added, correlate an access log with application l
 The shared logger masks the message and structured metadata before any transport receives the record. It uses two complementary strategies:
 
 1. Key-based redaction: values under keys matching sensitive patterns such as password, token, secret, authorization, credential, cookie, session ID, signature, private key, seed, OTP, PIN, CVV, or refresh/access token are replaced with [REDACTED]. A small allow-list preserves non-secret metadata such as tokenType, authProvider, authMethod, hasToken, and tokenExpiresAt.
-2. Pattern-based masking: recognizable emails are partially masked; JWTs, bearer/basic tokens, PEM private-key blocks, Stellar secret seeds, and connection-string credentials are redacted; phone numbers, payment-card numbers, and Stellar public identifiers are partially masked.
+2. Pattern-based masking: recognizable emails are partially masked; JWTs, bearer/basic tokens, PEM private-key blocks, Stellar secret seeds, and embedded connection-string passwords are redacted while the scheme and username remain for diagnostics; E.164-style phone numbers with a + country code, valid payment-card numbers, and Stellar public identifiers are partially masked.
 
 If masking itself fails, the logger replaces the message with a safe placeholder instead of passing through the unmasked record.
 
