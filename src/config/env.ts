@@ -18,6 +18,7 @@ interface EnvConfig {
   CORS_ORIGIN: string;
   RATE_LIMIT_WINDOW_MS: number;
   RATE_LIMIT_MAX_REQUESTS: number;
+  ENABLE_METRICS: boolean;
   DISPUTE_NOTIFICATION_WEBHOOK_URL: string;
   UPLOAD_STORAGE_DRIVER: string;
   UPLOAD_LOCAL_DIR: string;
@@ -229,6 +230,7 @@ const envSchema = z.object({
   CORS_ORIGIN: z.string().default('*'),
   RATE_LIMIT_WINDOW_MS: numeric(z.coerce.number().int().min(1000).default(900000)),
   RATE_LIMIT_MAX_REQUESTS: numeric(z.coerce.number().int().min(1).default(100)),
+  ENABLE_METRICS: z.preprocess(blankToUndefined, z.enum(['true', 'false']).default('false').transform((value) => value === 'true')),
   DISPUTE_NOTIFICATION_WEBHOOK_URL: z.string().default(''),
 
   // ── Uploads / storage ──────────────────────────────────────────────────────
