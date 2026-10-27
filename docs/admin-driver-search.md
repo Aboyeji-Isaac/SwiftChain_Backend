@@ -45,3 +45,8 @@ The response contains a drivers array and pagination metadata, including total i
 - The endpoint joins DriverProfile with User and DriverLocation records in MongoDB; it does not load the full driver population into application memory.
 - A driver with no current location record is reported with offline availability and is not considered available for assignment.
 - Invalid filter values and inverted minimum/maximum ranges return a 400 response. Missing authentication returns 401; a non-admin role receives 403.
+
+
+## Index deployment
+
+The DriverProfile schema adds indexes for tier plus reputation points, vehicle capacity, completed deliveries, and total deliveries to support the exposed filters. If production disables Mongoose automatic index creation, create these indexes through the normal database migration/maintenance process before relying on the endpoint. Confirm index build impact and storage cost against the production dataset.
