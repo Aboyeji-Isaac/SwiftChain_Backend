@@ -1,4 +1,5 @@
 import { IChatMessage } from '../models/ChatMessage';
+import { isEnabled } from '../config/flags';
 import {
   ChatMessageRepository,
   chatMessageRepository,
@@ -30,6 +31,14 @@ export class InvalidChatMessageError extends Error {
   }
 }
 
+/** Raised when chat is disabled and a caller attempts to persist a message. */
+export class ChatFeatureDisabledError extends Error {
+  constructor() {
+    super('Chat is disabled by feature flag');
+    this.name = 'ChatFeatureDisabledError';
+  }
+}
+
 /**
  * Chat business logic, isolated from Socket.IO.
  *
@@ -49,6 +58,8 @@ export class ChatMessageService {
    * every caller gets the same ordering.
    */
   async getRecentTranscript(limit: number = RECENT_MESSAGE_LIMIT): Promise<IChatMessage[]> {
+    if (!isEnabled('chat')) return [];
+
     const recent = await this.messages.findRecent(limit);
     return recent.reverse();
   }
@@ -102,6 +113,8 @@ export class ChatMessageService {
    * @throws {InvalidChatMessageError} If the payload is unusable.
    */
   async createMessage(payload: IncomingChatMessage): Promise<IChatMessage> {
+    if (!isEnabled('chat')) throw new ChatFeatureDisabledError();
+
     const validated = this.validate(payload);
     return this.messages.create(validated as Partial<IChatMessage>);
   }
