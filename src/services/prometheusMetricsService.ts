@@ -22,7 +22,11 @@ const escapeLabel = (value: string): string =>
   value.replace(/\\/g, '\\\\').replace(/"/g, '\\"').replace(/\n/g, '\\n');
 
 const labelsToString = (labels: Record<string, string | number>): string =>
-  '{' + Object.entries(labels).map(([key, value]) => key + '="' + escapeLabel(String(value)) + '"').join(',') + '}';
+  '{' +
+  Object.entries(labels)
+    .map(([key, value]) => key + '="' + escapeLabel(String(value)) + '"')
+    .join(',') +
+  '}';
 
 const safeMetricLabel = (value: string): string =>
   value.replace(/[^a-zA-Z0-9_.-]/g, '_').slice(0, 100) || 'unknown';
@@ -168,7 +172,10 @@ class PrometheusMetricsService {
       '# HELP swiftchain_mongodb_pool_connections MongoDB pool connections by state.',
       '# TYPE swiftchain_mongodb_pool_connections gauge',
       'swiftchain_mongodb_pool_connections' + labelsToString({ state: 'total' }) + ' ' + mongoPool.total,
-      'swiftchain_mongodb_pool_connections' + labelsToString({ state: 'available' }) + ' ' + mongoPool.available,
+      'swiftchain_mongodb_pool_connections' +
+        labelsToString({ state: 'available' }) +
+        ' ' +
+        mongoPool.available,
       'swiftchain_mongodb_pool_connections' +
         labelsToString({ state: 'in_use' }) + ' ' + Math.max(0, mongoPool.total - mongoPool.available),
     );
@@ -219,13 +226,41 @@ class PrometheusMetricsService {
     }
 
     const socketMetrics = socketMetricsService.getMetrics();
-    gauge('swiftchain_socket_connected_sockets', 'Currently connected Socket.IO clients.', socketMetrics.connectedSockets);
-    gauge('swiftchain_socket_total_connections', 'Total Socket.IO connections since process start.', socketMetrics.totalConnections);
-    gauge('swiftchain_socket_total_disconnections', 'Total Socket.IO disconnections since process start.', socketMetrics.totalDisconnections);
-    gauge('swiftchain_socket_messages_processed', 'Total Socket.IO messages processed since process start.', socketMetrics.messagesProcessed);
-    gauge('swiftchain_socket_message_latency_p50_ms', 'Socket.IO message latency p50 in milliseconds.', socketMetrics.messageLatencyMs.p50);
-    gauge('swiftchain_socket_message_latency_p95_ms', 'Socket.IO message latency p95 in milliseconds.', socketMetrics.messageLatencyMs.p95);
-    gauge('swiftchain_socket_message_latency_p99_ms', 'Socket.IO message latency p99 in milliseconds.', socketMetrics.messageLatencyMs.p99);
+    gauge(
+      'swiftchain_socket_connected_sockets',
+      'Currently connected Socket.IO clients.',
+      socketMetrics.connectedSockets,
+    );
+    gauge(
+      'swiftchain_socket_total_connections',
+      'Total Socket.IO connections since process start.',
+      socketMetrics.totalConnections,
+    );
+    gauge(
+      'swiftchain_socket_total_disconnections',
+      'Total Socket.IO disconnections since process start.',
+      socketMetrics.totalDisconnections,
+    );
+    gauge(
+      'swiftchain_socket_messages_processed',
+      'Total Socket.IO messages processed since process start.',
+      socketMetrics.messagesProcessed,
+    );
+    gauge(
+      'swiftchain_socket_message_latency_p50_ms',
+      'Socket.IO message latency p50 in milliseconds.',
+      socketMetrics.messageLatencyMs.p50,
+    );
+    gauge(
+      'swiftchain_socket_message_latency_p95_ms',
+      'Socket.IO message latency p95 in milliseconds.',
+      socketMetrics.messageLatencyMs.p95,
+    );
+    gauge(
+      'swiftchain_socket_message_latency_p99_ms',
+      'Socket.IO message latency p99 in milliseconds.',
+      socketMetrics.messageLatencyMs.p99,
+    );
 
     return lines.join('\n') + '\n';
   }
