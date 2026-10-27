@@ -11,7 +11,12 @@ const prometheusMetricsMiddleware = (
   next: NextFunction,
 ): void => {
   const path = req.path;
-  if (path === '/metrics' || path === '/api/v1/metrics' || path === '/api/v1/metrics/') {
+  if (
+    path === '/metrics' ||
+    path === '/metrics/' ||
+    path === '/api/v1/metrics' ||
+    path === '/api/v1/metrics/'
+  ) {
     next();
     return;
   }
