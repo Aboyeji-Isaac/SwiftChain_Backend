@@ -6,12 +6,97 @@ import { getDashboardMetrics } from '../controllers/dashboardController';
 import { dlqController } from '../controllers/dlqController';
 import { listFlaggedEscrows, resolveFlaggedEscrow } from '../controllers/escrowController';
 import { UserRole } from '../interfaces/IUser';
+import { buildQueryOptions } from '../middlewares/queryMiddleware';
+import { QueryFeatureConfig } from '../types/query';
+import { searchAdminDrivers } from '../controllers/adminDriverSearchController';
 
 const router = Router();
+
+const adminDriverQueryConfig: QueryFeatureConfig = {
+  sortableFields: [
+    'createdAt',
+    'updatedAt',
+    'reputationPoints',
+    'rating',
+    'totalDeliveries',
+    'completedDeliveries',
+    'tier',
+  ],
+  filterableFields: {
+    tier: 'string',
+    minVehicleCapacity: 'number',
+    minReputation: 'number',
+    maxReputation: 'number',
+    availability: 'string',
+    minCompletedDeliveries: 'number',
+    maxCompletedDeliveries: 'number',
+  },
+  defaultSort: { createdAt: -1 },
+  defaultLimit: 20,
+  maxLimit: 100,
+};
 
 // All admin routes require a valid JWT AND the admin role
 router.use(authenticate);
 router.use(requireRole(UserRole.ADMIN));
+
+/**
+ * @openapi
+ * /v1/admin/drivers:
+ *   get:
+ *     tags: [Admin]
+ *     summary: Search and filter drivers
+ *     description: Admin-only paginated search over driver profiles and public user fields. Password hashes are never returned.
+ *     security:
+ *       - bearerAuth: []
+ *     parameters:
+ *       - in: query
+ *         name: search
+ *         schema: { type: string, maxLength: 100 }
+ *         description: Case-insensitive search across first name, last name, and email.
+ *       - in: query
+ *         name: tier
+ *         schema: { type: string, enum: [bronze, silver, gold, platinum] }
+ *       - in: query
+ *         name: minVehicleCapacity
+ *         schema: { type: number, minimum: 0 }
+ *       - in: query
+ *         name: minReputation
+ *         schema: { type: number, minimum: 0 }
+ *       - in: query
+ *         name: maxReputation
+ *         schema: { type: number, minimum: 0 }
+ *       - in: query
+ *         name: availability
+ *         schema: { type: string, enum: [available, unavailable, online, offline, on_delivery] }
+ *       - in: query
+ *         name: minCompletedDeliveries
+ *         schema: { type: integer, minimum: 0 }
+ *       - in: query
+ *         name: maxCompletedDeliveries
+ *         schema: { type: integer, minimum: 0 }
+ *       - in: query
+ *         name: page
+ *         schema: { type: integer, minimum: 1, default: 1 }
+ *       - in: query
+ *         name: limit
+ *         schema: { type: integer, minimum: 1, maximum: 100, default: 20 }
+ *       - in: query
+ *         name: sort
+ *         schema: { type: string, example: -reputationPoints,createdAt }
+ *     responses:
+ *       200:
+ *         description: Paginated driver results with safe flattened DTOs.
+ *       400:
+ *         description: Invalid query parameters.
+ *       401:
+ *         description: Authentication required.
+ *       403:
+ *         description: Admin role required.
+ */
+router.get('/drivers', buildQueryOptions(adminDriverQueryConfig), searchAdminDrivers);
+
+
 
 /**
  * @openapi
