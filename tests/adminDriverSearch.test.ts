@@ -189,7 +189,7 @@ describe('AdminDriverSearchService', () => {
       availabilityStatus: 'online',
     });
     expect(result.drivers[0]).not.toHaveProperty('password');
-    expect(result.pagination).toMatchObject({
+    expect(result.meta).toMatchObject({
       totalItems: 21,
       totalPages: 3,
       currentPage: 2,
