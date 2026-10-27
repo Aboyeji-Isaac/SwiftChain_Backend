@@ -285,17 +285,17 @@ class PrometheusMetricsService {
       socketMetrics.connectedSockets,
     );
     counter(
-      'swiftchain_socket_total_connections',
+      'swiftchain_socket_connections_total',
       'Total Socket.IO connections since process start.',
       socketMetrics.totalConnections,
     );
     counter(
-      'swiftchain_socket_total_disconnections',
+      'swiftchain_socket_disconnections_total',
       'Total Socket.IO disconnections since process start.',
       socketMetrics.totalDisconnections,
     );
     counter(
-      'swiftchain_socket_messages_processed',
+      'swiftchain_socket_messages_processed_total',
       'Total Socket.IO messages processed since process start.',
       socketMetrics.messagesProcessed,
     );
