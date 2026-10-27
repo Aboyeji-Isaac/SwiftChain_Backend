@@ -114,6 +114,13 @@ class PrometheusMetricsService {
         name + ' ' + (Number.isFinite(value) ? value : 0),
       );
     };
+    const counter = (name: string, help: string, value: number): void => {
+      lines.push(
+        '# HELP ' + name + ' ' + help,
+        '# TYPE ' + name + ' counter',
+        name + ' ' + (Number.isFinite(value) ? value : 0),
+      );
+    };
 
     lines.push(
       '# HELP swiftchain_http_requests_total Total HTTP requests served by route.',
@@ -231,17 +238,17 @@ class PrometheusMetricsService {
       'Currently connected Socket.IO clients.',
       socketMetrics.connectedSockets,
     );
-    gauge(
+    counter(
       'swiftchain_socket_total_connections',
       'Total Socket.IO connections since process start.',
       socketMetrics.totalConnections,
     );
-    gauge(
+    counter(
       'swiftchain_socket_total_disconnections',
       'Total Socket.IO disconnections since process start.',
       socketMetrics.totalDisconnections,
     );
-    gauge(
+    counter(
       'swiftchain_socket_messages_processed',
       'Total Socket.IO messages processed since process start.',
       socketMetrics.messagesProcessed,
