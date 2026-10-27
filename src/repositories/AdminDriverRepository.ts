@@ -168,6 +168,16 @@ export class AdminDriverRepository {
         pipeline.push({ $match: { 'driverLocation.isAvailable': true } });
       } else if (availability === 'unavailable') {
         pipeline.push({ $match: { 'driverLocation.isAvailable': false } });
+      } else if (availability === 'offline') {
+        pipeline.push({
+          $match: {
+            $or: [
+              { 'driverLocation.status': 'offline' },
+              { driverLocation: { $exists: false } },
+              { driverLocation: null },
+            ],
+          },
+        });
       } else if (validStatuses.includes(availability as DriverAvailabilityStatus)) {
         pipeline.push({ $match: { 'driverLocation.status': availability } });
       } else {
