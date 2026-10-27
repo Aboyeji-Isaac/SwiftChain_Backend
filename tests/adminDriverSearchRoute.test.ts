@@ -5,7 +5,7 @@ jest.mock('../src/middleware/authenticate', () => ({
   __esModule: true,
   default: (req: Request, _res: Response, next: NextFunction): void => {
     const role = req.get('x-test-role') === 'admin' ? 'admin' : 'user';
-    (req as Request & { user?: { role: string } }).user = { role };
+    (req as unknown as { user?: { role: string } }).user = { role };
     next();
   },
 }));
