@@ -46,11 +46,19 @@ const escapeRegExp = (value: string): string => value.replace(/[.*+?^$()|[\]\\{}
 const numericFilter = (
   filter: Record<string, unknown>,
   key: string,
+  integer = false,
 ): number | undefined => {
   const value = filter[key];
   if (value === undefined) return undefined;
-  if (typeof value !== 'number' || !Number.isFinite(value) || value < 0) {
-    throw ApiError.badRequest(key + ' must be a non-negative number');
+  if (
+    typeof value !== 'number' ||
+    !Number.isFinite(value) ||
+    value < 0 ||
+    (integer && !Number.isInteger(value))
+  ) {
+    throw ApiError.badRequest(
+      key + (integer ? ' must be a non-negative integer' : ' must be a non-negative number'),
+    );
   }
   return value;
 };
@@ -80,8 +88,8 @@ export class AdminDriverRepository {
       profileMatch['vehicleDetails.capacityKg'] = { $gte: minVehicleCapacity };
     }
 
-    const minReputation = numericFilter(rawFilter, 'minReputation');
-    const maxReputation = numericFilter(rawFilter, 'maxReputation');
+    const minReputation = numericFilter(rawFilter, 'minReputation', true);
+    const maxReputation = numericFilter(rawFilter, 'maxReputation', true);
     if (minReputation !== undefined || maxReputation !== undefined) {
       const reputationRange: Record<string, number> = {};
       if (minReputation !== undefined) reputationRange.$gte = minReputation;
@@ -92,8 +100,8 @@ export class AdminDriverRepository {
       profileMatch.reputationPoints = reputationRange;
     }
 
-    const minCompletedDeliveries = numericFilter(rawFilter, 'minCompletedDeliveries');
-    const maxCompletedDeliveries = numericFilter(rawFilter, 'maxCompletedDeliveries');
+    const minCompletedDeliveries = numericFilter(rawFilter, 'minCompletedDeliveries', true);
+    const maxCompletedDeliveries = numericFilter(rawFilter, 'maxCompletedDeliveries', true);
     if (minCompletedDeliveries !== undefined || maxCompletedDeliveries !== undefined) {
       const deliveryRange: Record<string, number> = {};
       if (minCompletedDeliveries !== undefined) deliveryRange.$gte = minCompletedDeliveries;
@@ -108,8 +116,8 @@ export class AdminDriverRepository {
       profileMatch.completedDeliveries = deliveryRange;
     }
 
-    const minTotalDeliveries = numericFilter(rawFilter, 'minTotalDeliveries');
-    const maxTotalDeliveries = numericFilter(rawFilter, 'maxTotalDeliveries');
+    const minTotalDeliveries = numericFilter(rawFilter, 'minTotalDeliveries', true);
+    const maxTotalDeliveries = numericFilter(rawFilter, 'maxTotalDeliveries', true);
     if (minTotalDeliveries !== undefined || maxTotalDeliveries !== undefined) {
       const totalDeliveryRange: Record<string, number> = {};
       if (minTotalDeliveries !== undefined) totalDeliveryRange.$gte = minTotalDeliveries;
