@@ -180,7 +180,10 @@ export const getIndexerLagSnapshot = async (): Promise<IndexerLagSnapshot | null
     return null;
   }
 
-  const networkLedger = await sorobanService.getLatestLedger();
+  const rawNetworkLedger = await sorobanService.getLatestLedger();
+  const networkLedger =
+    typeof rawNetworkLedger === 'number' ? rawNetworkLedger : status.lastProcessedLedger;
+
   return {
     network: status.network,
     processedLedger: status.lastProcessedLedger,
