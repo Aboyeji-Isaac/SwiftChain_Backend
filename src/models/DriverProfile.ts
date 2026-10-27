@@ -169,6 +169,12 @@ driverProfileSchema.index({ isSuspended: 1, suspendedUntil: 1 });
 // Compound index for filtering by user and deletion status
 driverProfileSchema.index({ userId: 1, isDeleted: 1 });
 
+// Support the allow-listed admin search filters without collection scans.
+driverProfileSchema.index({ tier: 1, reputationPoints: -1 });
+driverProfileSchema.index({ 'vehicleDetails.capacityKg': 1 });
+driverProfileSchema.index({ completedDeliveries: 1 });
+driverProfileSchema.index({ totalDeliveries: 1 });
+
 const DriverProfile = mongoose.model<IDriverProfile>('DriverProfile', driverProfileSchema);
 
 export default DriverProfile;
