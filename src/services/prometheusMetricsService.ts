@@ -37,14 +37,17 @@ const readMongoPoolSnapshot = (): MongoPoolSnapshot => {
     const topology = (connection.getClient() as unknown as {
       topology?: {
         s?: {
-          servers?: Map<string, {
-            s?: {
-              pool?: {
-                totalConnectionCount?: number;
-                availableConnectionCount?: number;
+          servers?: Map<
+            string,
+            {
+              s?: {
+                pool?: {
+                  totalConnectionCount?: number;
+                  availableConnectionCount?: number;
+                };
               };
-            };
-          }>;
+            }
+          >;
         };
       };
     }).topology;
@@ -80,7 +83,12 @@ class PrometheusMetricsService {
   private readonly requestCounters = new Map<string, number>();
   private readonly requestHistograms = new Map<string, HistogramSnapshot>();
 
-  public recordRequest(method: string, route: string, statusCode: number, durationMs: number): void {
+  public recordRequest(
+    method: string,
+    route: string,
+    statusCode: number,
+    durationMs: number,
+  ): void {
     const normalizedMethod = method.toUpperCase();
     const normalizedRoute = route || 'unmatched';
     const counterKey = JSON.stringify([normalizedMethod, normalizedRoute, statusCode]);
@@ -131,7 +139,8 @@ class PrometheusMetricsService {
       lines.push(
         'swiftchain_http_requests_total' +
           labelsToString({ method, route, status_code: statusCode }) +
-          ' ' + value,
+          ' ' +
+          value,
       );
     }
 
@@ -145,24 +154,47 @@ class PrometheusMetricsService {
         lines.push(
           'swiftchain_http_request_duration_seconds_bucket' +
             labelsToString({ method, route, le: boundary }) +
-            ' ' + histogram.bucketCounts[index],
+            ' ' +
+            histogram.bucketCounts[index],
         );
       });
       lines.push(
         'swiftchain_http_request_duration_seconds_bucket' +
-          labelsToString({ method, route, le: '+Inf' }) + ' ' + histogram.count,
+          labelsToString({ method, route, le: '+Inf' }) +
+          ' ' +
+          histogram.count,
         'swiftchain_http_request_duration_seconds_sum' +
-          labelsToString({ method, route }) + ' ' + histogram.sumSeconds,
+          labelsToString({ method, route }) +
+          ' ' +
+          histogram.sumSeconds,
         'swiftchain_http_request_duration_seconds_count' +
-          labelsToString({ method, route }) + ' ' + histogram.count,
+          labelsToString({ method, route }) +
+          ' ' +
+          histogram.count,
       );
     }
 
-    gauge('swiftchain_process_uptime_seconds', 'Process uptime in seconds.', process.uptime());
+    gauge(
+      'swiftchain_process_uptime_seconds',
+      'Process uptime in seconds.',
+      process.uptime(),
+    );
     const memory = process.memoryUsage();
-    gauge('swiftchain_process_resident_memory_bytes', 'Resident process memory in bytes.', memory.rss);
-    gauge('swiftchain_process_heap_used_bytes', 'Node.js heap memory used in bytes.', memory.heapUsed);
-    gauge('swiftchain_process_heap_total_bytes', 'Node.js heap memory allocated in bytes.', memory.heapTotal);
+    gauge(
+      'swiftchain_process_resident_memory_bytes',
+      'Resident process memory in bytes.',
+      memory.rss,
+    );
+    gauge(
+      'swiftchain_process_heap_used_bytes',
+      'Node.js heap memory used in bytes.',
+      memory.heapUsed,
+    );
+    gauge(
+      'swiftchain_process_heap_total_bytes',
+      'Node.js heap memory allocated in bytes.',
+      memory.heapTotal,
+    );
 
     const mongoPool = readMongoPoolSnapshot();
     gauge(
@@ -178,13 +210,18 @@ class PrometheusMetricsService {
     lines.push(
       '# HELP swiftchain_mongodb_pool_connections MongoDB pool connections by state.',
       '# TYPE swiftchain_mongodb_pool_connections gauge',
-      'swiftchain_mongodb_pool_connections' + labelsToString({ state: 'total' }) + ' ' + mongoPool.total,
+      'swiftchain_mongodb_pool_connections' +
+        labelsToString({ state: 'total' }) +
+        ' ' +
+        mongoPool.total,
       'swiftchain_mongodb_pool_connections' +
         labelsToString({ state: 'available' }) +
         ' ' +
         mongoPool.available,
       'swiftchain_mongodb_pool_connections' +
-        labelsToString({ state: 'in_use' }) + ' ' + Math.max(0, mongoPool.total - mongoPool.available),
+        labelsToString({ state: 'in_use' }) +
+        ' ' +
+        Math.max(0, mongoPool.total - mongoPool.available),
     );
 
     let redisHealthy = 0;
@@ -214,13 +251,18 @@ class PrometheusMetricsService {
       lines.push(
         'swiftchain_circuit_breaker_open' +
           labelsToString({ name: safeMetricLabel(breaker.name), state: breaker.state }) +
-          ' ' + (breaker.state === 'closed' ? 0 : 1),
+          ' ' +
+          (breaker.state === 'closed' ? 0 : 1),
       );
     }
 
     try {
       const lag = await getIndexerLagSnapshot();
-      gauge('swiftchain_indexer_lag_available', 'Whether indexer lag could be measured.', lag ? 1 : 0);
+      gauge(
+        'swiftchain_indexer_lag_available',
+        'Whether indexer lag could be measured.',
+        lag ? 1 : 0,
+      );
       if (lag) {
         gauge(
           'swiftchain_indexer_lag_ledgers',
@@ -229,7 +271,11 @@ class PrometheusMetricsService {
         );
       }
     } catch {
-      gauge('swiftchain_indexer_lag_available', 'Whether indexer lag could be measured.', 0);
+      gauge(
+        'swiftchain_indexer_lag_available',
+        'Whether indexer lag could be measured.',
+        0,
+      );
     }
 
     const socketMetrics = socketMetricsService.getMetrics();
