@@ -272,7 +272,11 @@ const envSchema = z.object({
   AWS_S3_SIGNED_URL_EXPIRES_SECONDS: z.coerce.number().int().min(1).default(900),
 
   // ── Indexer lag monitoring ─────────────────────────────────────────────────
-  INDEXER_LAG_ALERT_THRESHOLD: z.coerce.number().int().min(1).default(100),
+  INDEXER_LAG_ALERT_THRESHOLD: z.coerce
+    .number()
+    .int()
+    .min(1)
+    .default(100),
   INDEXER_LAG_CHECK_INTERVAL_MS: z.coerce.number().int().min(1000).default(60000),
   INDEXER_LAG_WEBHOOK_URL: z.string().trim().default(''),
 
