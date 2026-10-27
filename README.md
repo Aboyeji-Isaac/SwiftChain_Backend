@@ -355,3 +355,8 @@ linked PR 5,4,6
 ## 📄 License
 
 This project is licensed under the ISC License.
+
+
+## Prometheus metrics endpoint
+
+Operational metrics are available at `GET /metrics` and `GET /api/v1/metrics` when `ENABLE_METRICS=true`. The endpoint is disabled by default and requires a valid admin Bearer token when enabled. See [Prometheus metrics and operations guidance](docs/prometheus-metrics.md) for metric names, scrape setup, and alert recommendations.
