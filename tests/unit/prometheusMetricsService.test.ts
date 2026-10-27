@@ -77,6 +77,7 @@ describe('PrometheusMetricsService', () => {
     expect(output).toContain('swiftchain_circuit_breaker_open{name="soroban-rpc",state="open"} 1');
     expect(output).toContain('swiftchain_indexer_lag_ledgers 25');
     expect(output).toContain('swiftchain_socket_connected_sockets 3');
+    expect(output).toContain('# TYPE swiftchain_socket_total_connections counter');
   });
 
   it('escapes label values before rendering', async () => {
