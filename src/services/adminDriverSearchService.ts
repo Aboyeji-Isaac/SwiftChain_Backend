@@ -1,10 +1,30 @@
 import { QueryOptions, PaginationMeta } from '../types/query';
-import { buildPaginationMeta } from '../middlewares/queryMiddleware';
 import {
   AdminDriverRepository,
   AdminDriverRecord,
   adminDriverRepository,
 } from '../repositories/AdminDriverRepository';
+
+const buildDriverPaginationMeta = (
+  totalItems: number,
+  page: number,
+  limit: number,
+): PaginationMeta => {
+  const totalPages = limit > 0 ? Math.ceil(totalItems / limit) : 0;
+  const hasNextPage = page < totalPages;
+  const hasPreviousPage = page > 1 && totalItems > 0;
+
+  return {
+    totalItems,
+    totalPages,
+    currentPage: page,
+    limit,
+    hasNextPage,
+    hasPreviousPage,
+    nextPage: hasNextPage ? page + 1 : null,
+    previousPage: hasPreviousPage ? page - 1 : null,
+  };
+};
 
 export interface AdminDriverDto {
   id: string;
@@ -42,7 +62,7 @@ export class AdminDriverSearchService {
     const result = await this.repository.search(options, search);
     return {
       drivers: result.items.map((record) => this.toDto(record)),
-      pagination: buildPaginationMeta(result.total, options.page, options.limit),
+      pagination: buildDriverPaginationMeta(result.total, options.page, options.limit),
     };
   }
 
