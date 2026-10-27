@@ -44,10 +44,28 @@ jest.mock('../../src/services/monitorService', () => ({
 }));
 
 import prometheusMetricsService from '../../src/services/prometheusMetricsService';
+import mongoose from 'mongoose';
+import { redisClient } from '../../src/config/redis';
+import { getIndexerLagSnapshot } from '../../src/services/monitorService';
+
+const mongoConnection = (mongoose as unknown as { connection: { getClient: jest.Mock } }).connection;
+const redis = redisClient as unknown as { status: string; ping: jest.Mock };
+const indexerLagSnapshot = getIndexerLagSnapshot as jest.Mock;
 
 describe('PrometheusMetricsService', () => {
   beforeEach(() => {
     jest.clearAllMocks();
+    mongoConnection.getClient.mockImplementation(() => ({
+      topology: { s: { servers: new Map() } },
+    }));
+    redis.status = 'ready';
+    redis.ping.mockResolvedValue('PONG');
+    indexerLagSnapshot.mockResolvedValue({
+      network: 'testnet',
+      processedLedger: 100,
+      networkLedger: 125,
+      lagLedgers: 25,
+    });
   });
 
   it('renders valid Prometheus declarations and request histogram samples', async () => {
@@ -78,6 +96,51 @@ describe('PrometheusMetricsService', () => {
     expect(output).toContain('swiftchain_indexer_lag_ledgers 25');
     expect(output).toContain('swiftchain_socket_connected_sockets 3');
     expect(output).toContain('# TYPE swiftchain_socket_connections_total counter');
+  });
+
+  it('exports MongoDB pool utilization when driver pool statistics are available', async () => {
+    mongoConnection.getClient.mockReturnValue({
+      topology: {
+        s: {
+          servers: new Map([
+            ['primary', { s: { pool: { totalConnectionCount: 10, availableConnectionCount: 4 } } }],
+          ]),
+        },
+      },
+    });
+
+    const output = await prometheusMetricsService.render();
+
+    expect(output).toContain('swiftchain_mongodb_pool_stats_available 1');
+    expect(output).toContain('swiftchain_mongodb_pool_connections{state="total"} 10');
+    expect(output).toContain('swiftchain_mongodb_pool_connections{state="available"} 4');
+    expect(output).toContain('swiftchain_mongodb_pool_connections{state="in_use"} 6');
+  });
+
+  it('reports unavailable dependencies without failing the metrics scrape', async () => {
+    mongoConnection.getClient.mockImplementation(() => {
+      throw new Error('MongoDB is disconnected');
+    });
+    redis.status = 'wait';
+    indexerLagSnapshot.mockResolvedValueOnce(null);
+
+    const output = await prometheusMetricsService.render();
+
+    expect(output).toContain('swiftchain_mongodb_pool_stats_available 0');
+    expect(output).toContain('swiftchain_redis_healthy 0');
+    expect(output).toContain('swiftchain_indexer_lag_available 0');
+    expect(output).not.toContain('swiftchain_indexer_lag_ledgers ');
+  });
+
+  it('handles Redis and indexer probe errors without breaking exposition output', async () => {
+    redis.ping.mockRejectedValueOnce(new Error('Redis unavailable'));
+    indexerLagSnapshot.mockRejectedValueOnce(new Error('RPC unavailable'));
+
+    const output = await prometheusMetricsService.render();
+
+    expect(output).toContain('swiftchain_redis_healthy 0');
+    expect(output).toContain('swiftchain_indexer_lag_available 0');
+    expect(output).toContain('# TYPE swiftchain_http_requests_total counter');
   });
 
   it('escapes label values before rendering', async () => {
