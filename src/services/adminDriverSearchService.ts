@@ -51,7 +51,7 @@ export interface AdminDriverDto {
 
 export interface AdminDriverSearchResponse {
   drivers: AdminDriverDto[];
-  pagination: PaginationMeta;
+  meta: PaginationMeta;
 }
 
 /** Admin-facing driver search orchestration and DTO shaping. */
@@ -62,7 +62,7 @@ export class AdminDriverSearchService {
     const result = await this.repository.search(options, search);
     return {
       drivers: result.items.map((record) => this.toDto(record)),
-      pagination: buildDriverPaginationMeta(result.total, options.page, options.limit),
+      meta: buildDriverPaginationMeta(result.total, options.page, options.limit),
     };
   }
 
