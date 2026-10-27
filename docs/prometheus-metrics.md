@@ -37,7 +37,7 @@ The response uses text/plain; version=0.0.4; charset=utf-8 and can be scraped by
 | swiftchain_circuit_breaker_open | Gauge | Circuit-breaker state by registered breaker |
 | swiftchain_indexer_lag_available | Gauge | Whether a lag snapshot could be read |
 | swiftchain_indexer_lag_ledgers | Gauge | Gap between persisted processed ledger and the live network ledger |
-| swiftchain_socket_* | Gauge | Existing Socket.IO connection, message, and latency snapshots |
+| swiftchain_socket_* | Gauge / counter | Current connection and latency snapshots are gauges; cumulative connection, disconnection, and message totals are counters |
 
 HTTP route labels use Express route templates rather than raw request URLs, preventing user IDs, arbitrary paths, and query values from creating high-cardinality labels. The indexer metric reads the current checkpoint and live ledger without persisting alerts or sending webhooks during a scrape.
 
