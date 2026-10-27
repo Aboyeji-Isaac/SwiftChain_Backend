@@ -62,10 +62,11 @@ describe('AdminDriverRepository', () => {
     });
     const match = searchStage?.$match as { $or: Array<Record<string, unknown>> };
 
-    expect(match.$or).toHaveLength(3);
+    expect(match.$or).toHaveLength(4);
     expect(match.$or[0]['user.firstName']).toEqual(/Ada\.\+/i);
     expect(match.$or[1]['user.lastName']).toBeInstanceOf(RegExp);
     expect(match.$or[2]['user.email']).toBeInstanceOf(RegExp);
+    expect(match.$or[3]._searchFullName).toEqual(/Ada\.\+/i);
   });
 
   it('maps tier and minimum vehicle capacity filters to profile fields', async () => {
