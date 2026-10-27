@@ -28,37 +28,41 @@ const safeMetricLabel = (value: string): string =>
   value.replace(/[^a-zA-Z0-9_.-]/g, '_').slice(0, 100) || 'unknown';
 
 const readMongoPoolSnapshot = (): MongoPoolSnapshot => {
-  const connection = mongoose.connection;
-  const topology = (connection.getClient() as unknown as {
-    topology?: {
-      s?: {
-        servers?: Map<string, {
-          s?: {
-            pool?: {
-              totalConnectionCount?: number;
-              availableConnectionCount?: number;
+  try {
+    const connection = mongoose.connection;
+    const topology = (connection.getClient() as unknown as {
+      topology?: {
+        s?: {
+          servers?: Map<string, {
+            s?: {
+              pool?: {
+                totalConnectionCount?: number;
+                availableConnectionCount?: number;
+              };
             };
-          };
-        }>;
+          }>;
+        };
       };
-    };
-  }).topology;
+    }).topology;
 
-  const servers = topology?.s?.servers;
-  if (!servers || typeof servers.values !== 'function') {
+    const servers = topology?.s?.servers;
+    if (!servers || typeof servers.values !== 'function') {
+      return { total: 0, available: 0, introspectionAvailable: false };
+    }
+
+    let total = 0;
+    let available = 0;
+    for (const server of servers.values()) {
+      const pool = server.s?.pool;
+      if (!pool) continue;
+      total += pool.totalConnectionCount ?? 0;
+      available += pool.availableConnectionCount ?? 0;
+    }
+
+    return { total, available, introspectionAvailable: true };
+  } catch {
     return { total: 0, available: 0, introspectionAvailable: false };
   }
-
-  let total = 0;
-  let available = 0;
-  for (const server of servers.values()) {
-    const pool = server.s?.pool;
-    if (!pool) continue;
-    total += pool.totalConnectionCount ?? 0;
-    available += pool.availableConnectionCount ?? 0;
-  }
-
-  return { total, available, introspectionAvailable: true };
 };
 
 /**
