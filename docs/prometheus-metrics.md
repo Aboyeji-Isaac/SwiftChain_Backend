@@ -59,4 +59,4 @@ Treat these as starting points and tune them to the service's normal traffic:
 - swiftchain_indexer_lag_ledgers remains above INDEXER_LAG_ALERT_THRESHOLD.
 - MongoDB pool in-use connections remain close to total connections while request latency rises.
 
-This endpoint exports metrics; it does not configure Prometheus, Grafana, Datadog, alert delivery, or retention automatically.
+All in-memory request counters and socket totals are process-local and reset when that instance restarts. Scrape each instance separately and aggregate in the monitoring backend; do not treat one instance's values as a fleet-wide total. This endpoint exports metrics; it does not configure Prometheus, Grafana, Datadog, alert delivery, or retention automatically.
