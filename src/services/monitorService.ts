@@ -161,6 +161,34 @@ export const checkIndexerLag = async (): Promise<IndexerLagCheckResult> => {
   return result;
 };
 
+/**
+ * Read-only indexer lag snapshot for scrape-based monitoring.
+ *
+ * Unlike checkIndexerLag(), this helper does not create checkpoints, persist
+ * alerts, or send webhooks, so frequent metrics scrapes have no write side effects.
+ */
+export interface IndexerLagSnapshot {
+  network: string;
+  processedLedger: number;
+  networkLedger: number;
+  lagLedgers: number;
+}
+
+export const getIndexerLagSnapshot = async (): Promise<IndexerLagSnapshot | null> => {
+  const status = await IndexerStatus.findOne({ network: stellarConfig.network });
+  if (!status) {
+    return null;
+  }
+
+  const networkLedger = await sorobanService.getLatestLedger();
+  return {
+    network: status.network,
+    processedLedger: status.lastProcessedLedger,
+    networkLedger,
+    lagLedgers: Math.max(0, networkLedger - status.lastProcessedLedger),
+  };
+};
+
 // ─── Alert history ─────────────────────────────────────────────────────────────
 
 /**
