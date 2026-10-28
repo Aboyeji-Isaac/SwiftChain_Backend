@@ -1,55 +1,24 @@
-import { NextFunction, Request, Response } from 'express';
-import jwt, { JwtPayload } from 'jsonwebtoken';
-import { HttpError } from '../utils/httpError';
-import env from '../config/env';
+import { Request, Response, NextFunction } from 'express';
+import authenticateCanonical from './authenticate';
+import AppError from '../utils/AppError';
 
-const jwtSecret = env.JWT_SECRET;
+export type AuthenticatedRequest = Request & {
+  user?: { role?: string; userId?: string; id?: string; _id?: unknown };
+};
 
-export interface AuthenticatedRequest extends Request {
-  user?: JwtPayload & {
-    role?: string;
-    sub?: string;
-  };
-}
-
-export const authenticate = (
+/** Canonical database-backed authentication, retained under the old import. */
+export const authenticate = authenticateCanonical as (
   req: AuthenticatedRequest,
   res: Response,
   next: NextFunction,
-): void => {
-  const authHeader = req.headers.authorization;
-
-  if (!authHeader || !authHeader.startsWith('Bearer ')) {
-    next(new HttpError(401, 'Authorization header missing or malformed'));
-    return;
-  }
-
-  const token = authHeader.split(' ')[1];
-
-  try {
-    const payload = jwt.verify(token, jwtSecret);
-
-    if (typeof payload === 'string') {
-      next(new HttpError(401, 'Invalid authorization token'));
-      return;
-    }
-
-    req.user = payload;
-    next();
-  } catch (error) {
-    next(new HttpError(401, 'Invalid or expired authorization token'));
-  }
-};
+) => void;
 
 export const authorize = (allowedRoles: string[] = ['driver', 'admin']) => {
-  return (req: AuthenticatedRequest, res: Response, next: NextFunction): void => {
-    const role = req.user?.role;
-
-    if (!role || !allowedRoles.includes(role)) {
-      next(new HttpError(403, 'Insufficient permissions to perform this action'));
+  return (req: AuthenticatedRequest, _res: Response, next: NextFunction): void => {
+    if (!req.user?.role || !allowedRoles.includes(String(req.user.role))) {
+      next(new AppError('Insufficient permissions to perform this action', 403));
       return;
     }
-
     next();
   };
 };

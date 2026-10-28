@@ -7,6 +7,7 @@ import { UserRole, UserStatus } from '../interfaces/IUser';
 import { getRedisClient } from '../config/redis';
 import { sorobanService } from '../blockchain/soroban.service';
 import logger from '../config/logger';
+import env from '../config/env';
 
 export interface ActiveDeliveriesMetrics {
   total: number;
@@ -55,11 +56,6 @@ export interface GetDashboardMetricsOptions {
 export class DashboardService {
   private readonly CACHE_KEY = 'admin:dashboard:metrics';
 
-  private getCacheTtl(): number {
-    const parsed = parseInt(process.env.ADMIN_DASHBOARD_CACHE_TTL_SECONDS ?? '60', 10);
-    return Number.isFinite(parsed) && parsed > 0 ? parsed : 60;
-  }
-
   /**
    * Aggregate active deliveries, online drivers, and total escrow volume metrics.
    * Leverages Redis caching to reduce database load.
@@ -67,7 +63,9 @@ export class DashboardService {
   public async getAdminDashboardMetrics(
     options: GetDashboardMetricsOptions = {},
   ): Promise<AdminDashboardMetrics> {
-    const ttlSeconds = this.getCacheTtl();
+    // Issue #214: the TTL comes from the validated env object — the Zod
+    // schema clamps it to a positive integer and applies the 60s default.
+    const ttlSeconds = env.ADMIN_DASHBOARD_CACHE_TTL_SECONDS;
     const redis = getRedisClient();
 
     // 1. Try reading from cache unless forceRefresh is true

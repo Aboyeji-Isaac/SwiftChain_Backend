@@ -1,6 +1,6 @@
 import { Router } from 'express';
 import { deliveryController } from '../controllers/delivery.controller';
-import validate from '../middleware/validate';
+import validateRequest from '../middleware/validate';
 import { requireIdempotencyKey } from '../middlewares/idempotency';
 import {
   createDeliverySchema,
@@ -12,6 +12,19 @@ import requireRole from '../middleware/requireRole';
 import { UserRole } from '../interfaces/IUser';
 import { estimateFeeSchema } from '../validators/pricingValidator';
 import { pricingController } from '../controllers/pricingController';
+import { buildQueryOptions } from '../middlewares/queryMiddleware';
+
+/** Shared query contract for the delivery list endpoints (docs/query-contract.md). */
+const deliveryListQuery = buildQueryOptions({
+  sortableFields: ['createdAt'],
+  filterableFields: {
+    status: 'string',
+    driver: 'string',
+  },
+  searchableFields: ['trackingNumber', 'customer.name', 'customer.phone'],
+  defaultSort: { createdAt: -1 },
+  defaultLimit: 10,
+});
 
 const router = Router();
 
@@ -88,11 +101,11 @@ router.post(
 router.post(
   '/',
   requireIdempotencyKey,
-  validate({ body: createDeliverySchema }),
+  validateRequest({ body: createDeliverySchema }),
   deliveryController.create.bind(deliveryController),
 );
 
-router.get('/', deliveryController.list.bind(deliveryController));
+router.get('/', deliveryListQuery, deliveryController.list.bind(deliveryController));
 
 /**
  * @openapi
@@ -119,7 +132,11 @@ router.get('/', deliveryController.list.bind(deliveryController));
  *             schema:
  *               $ref: '#/components/schemas/DeliveryListResponse'
  */
-router.get('/archived', deliveryController.listArchived.bind(deliveryController));
+router.get(
+  '/archived',
+  deliveryListQuery,
+  deliveryController.listArchived.bind(deliveryController),
+);
 
 /**
  * @openapi
@@ -183,7 +200,7 @@ router.get('/:id', deliveryController.getById.bind(deliveryController));
 
 router.patch(
   '/:id',
-  validate({ body: updateDeliverySchema }),
+  validateRequest({ body: updateDeliverySchema }),
   deliveryController.update.bind(deliveryController),
 );
 
@@ -263,7 +280,7 @@ router.patch(
   '/:id/assign-driver',
   authenticate,
   requireRole(UserRole.ADMIN),
-  validate({ body: assignDriverSchema }),
+  validateRequest({ body: assignDriverSchema }),
   deliveryController.assignDriver.bind(deliveryController),
 );
 

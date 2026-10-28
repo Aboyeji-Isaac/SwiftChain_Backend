@@ -28,9 +28,9 @@ interface EnvConfig {
   UPLOAD_LOCAL_DIR: string;
   UPLOAD_MAX_FILE_SIZE_MB: number;
   AWS_S3_BUCKET?: string;
-  AWS_REGION?: string;
-  AWS_ACCESS_KEY_ID?: string;
-  AWS_SECRET_ACCESS_KEY?: string;
+  AWS_REGION: string;
+  AWS_ACCESS_KEY_ID: string;
+  AWS_SECRET_ACCESS_KEY: string;
   AWS_S3_SIGNED_URL_EXPIRES_SECONDS: number;
   REDIS_URL: string;
   REDIS_LOCK_TTL_MS: number;
@@ -41,20 +41,6 @@ interface EnvConfig {
   PROFILE_PICTURE_WIDTH?: string;
   PROFILE_PICTURE_HEIGHT?: string;
   PROFILE_PICTURE_QUALITY?: string;
-
-  // ── Uploads / evidence storage ─────────────────────────────────────────────
-  /** Public base URL used to build links to locally stored uploads. Default: http://localhost:3000 */
-  APP_BASE_URL: string;
-  /** Maximum accepted evidence upload size, in MB. Default: 10 */
-  UPLOAD_MAX_FILE_SIZE_MB: number;
-  /** AWS region for the S3 upload driver. Default: us-east-1 */
-  AWS_REGION: string;
-  /** AWS access key id. Blank falls back to the provider credential chain. */
-  AWS_ACCESS_KEY_ID: string;
-  /** AWS secret access key. Blank falls back to the provider credential chain. */
-  AWS_SECRET_ACCESS_KEY: string;
-  /** Lifetime (s) of S3 pre-signed download URLs. Default: 900 */
-  AWS_S3_SIGNED_URL_EXPIRES_SECONDS: number;
 
   // ── Indexer lag monitoring ─────────────────────────────────────────────────
   /** Ledger gap at which an indexer-lag alert is raised. Default: 100 */
@@ -71,6 +57,8 @@ interface EnvConfig {
   SOROBAN_RPC_RETRY_BASE_MS: number;
   /** Maximum delay (ms) cap for RPC exponential backoff. Default: 8000 */
   SOROBAN_RPC_RETRY_MAX_MS: number;
+  /** Fraction of jitter (0-1) applied to each RPC retry delay. Default: 0.2 */
+  SOROBAN_RPC_RETRY_JITTER_RATIO: number;
   /** Maximum attempts to retry a transaction that fails with tx_bad_seq. Default: 3 */
   STELLAR_BAD_SEQ_MAX_RETRIES: number;
 
@@ -102,6 +90,10 @@ interface EnvConfig {
   SOCKET_MAX_MISSED_PONGS: number;
   /** Time (ms) a queued socket message waits for an ack before retry. Default: 15000 */
   SOCKET_MESSAGE_ACK_TIMEOUT_MS: number;
+  /** Max unacknowledged messages retained per driver before oldest are evicted. Default: 100 */
+  SOCKET_MESSAGE_QUEUE_MAX: number;
+  /** Max automatic re-delivery attempts per queued message after ACK timeouts. Default: 5 */
+  SOCKET_MESSAGE_MAX_RETRIES: number;
   /** Interval (ms) between periodic socket token expiry checks. Default: 60000 */
   SOCKET_TOKEN_CHECK_INTERVAL_MS: number;
   /** Grace period (ms) granted after a socket token expires. Default: 30000 */
@@ -142,6 +134,11 @@ interface EnvConfig {
   ESCROW_MONITOR_CRON: string;
   /** Lock TTL (s) after which a still-locked escrow is flagged as expired. Default: 86400 (24h) */
   ESCROW_LOCK_TTL_SECONDS: number;
+  /**
+   * Funding window (s): how long a delivery with a configured escrow amount
+   * has to be funded before it is auto-cancelled. Default: 86400 (24h)
+   */
+  ESCROW_FUNDING_WINDOW_SECONDS: number;
 
   // ── Stellar / Soroban network ─────────────────────────────────
   /** Target Stellar network. Default: testnet */
@@ -157,6 +154,24 @@ interface EnvConfig {
   SOROBAN_ESCROW_LOCK_FUNCTION: string;
   STELLAR_BASE_FEE: number;
   STELLAR_TRANSACTION_TIMEOUT_SECONDS: number;
+
+  // ── Escrow indexer ────────────────────────────────────────────
+  /** Contract id the escrow indexer watches. Blank disables indexer jobs. */
+  ESCROW_CONTRACT_ID: string;
+  /** Event topic the escrow indexer filters on. Default: escrow_funded */
+  ESCROW_FUNDED_EVENT_TOPIC: string;
+
+  // ── Logging ───────────────────────────────────────────────────
+  /** Directory for rotating log files. Default: logs */
+  LOG_DIR: string;
+  /** Maximum size of a log file before rotation. Default: 20m */
+  LOG_MAX_SIZE: string;
+  /** How long rotated log files are retained. Default: 14d */
+  LOG_MAX_FILES: string;
+  /** Whether rotated log files are compressed. Default: true */
+  LOG_ZIPPED_ARCHIVE: boolean;
+  /** Disable file logging entirely (console only). Default: false */
+  LOG_DISABLE_FILE: boolean;
 
   // ── Circuit breakers (Soroban RPC) ─────────────────────────────────────────
   /** Percentage of failures in the rolling window that opens the circuit. Default: 50 */
@@ -183,6 +198,20 @@ interface EnvConfig {
   WEBHOOK_RETRY_CRON: string;
   /** Maximum due attempts processed per retry sweep tick. Default: 50 */
   WEBHOOK_RETRY_BATCH_SIZE: number;
+  /** Flush window (ms) for grouping batched webhook deliveries. Default: 1000 */
+  WEBHOOK_BATCH_FLUSH_WINDOW_MS: number;
+
+  // ── Indexer event retries ─────────────────────────────────────────
+  /** Retry attempts allowed for a failed EventLog entry before it is escalated to the DLQ. Default: 5 */
+  EVENTLOG_RETRY_MAX_ATTEMPTS: number;
+  /** Base delay (ms) for EventLog retry exponential backoff. Default: 60000 */
+  EVENTLOG_RETRY_BASE_MS: number;
+  /** Maximum delay (ms) cap for EventLog retry exponential backoff. Default: 3600000 */
+  EVENTLOG_RETRY_MAX_MS: number;
+  /** Cron expression driving the EventLog retry sweep. Default: every minute */
+  EVENTLOG_RETRY_CRON: string;
+  /** Maximum due entries retried per sweep tick. Default: 25 */
+  EVENTLOG_RETRY_BATCH_SIZE: number;
 
   // ── Driver assignment ────────────────────────────────────────────
   /** Number of times the search radius doubles before giving up. Default: 3 */
@@ -194,9 +223,19 @@ interface EnvConfig {
   /** Cron expression driving the driver-rating sweep. Default: hourly */
   DRIVER_RATING_CRON: string;
 
+  // ── Merchant onboarding ──────────────────────────────────────────
+  /** Seconds a wallet-ownership challenge stays valid. Default: 900 */
+  ONBOARDING_CHALLENGE_TTL_SECONDS: number;
+  /** Rejected wallet proofs allowed before an onboarding locks. Default: 5 */
+  ONBOARDING_MAX_PROOF_ATTEMPTS: number;
+
   // ── Proof of delivery ────────────────────────────────────────────
   /** Maximum accepted proof-of-delivery image size, in MB. Default: 8 */
   PROOF_OF_DELIVERY_MAX_SIZE_MB: number;
+
+  // ── Admin dashboard ──────────────────────────────────────────────
+  /** TTL (s) of the Redis cache for aggregated admin dashboard metrics. Default: 60 */
+  ADMIN_DASHBOARD_CACHE_TTL_SECONDS: number;
 }
 
 /**
@@ -231,6 +270,7 @@ const envSchema = z.object({
   JWT_SECRET: z.string().min(16).default('change_me_in_prod_change_me'),
   JWT_EXPIRES_IN: z.string().trim().min(1).default('7d'),
   BCRYPT_ROUNDS: numeric(z.coerce.number().int().min(8).max(31).default(10)),
+  LOG_LEVEL: z.string().trim().min(1).default('info'),
   CORS_ORIGIN: z.string().default('*'),
   RATE_LIMIT_WINDOW_MS: numeric(z.coerce.number().int().min(1000).default(900000)),
   RATE_LIMIT_MAX_REQUESTS: numeric(z.coerce.number().int().min(1).default(100)),
@@ -258,9 +298,9 @@ const envSchema = z.object({
   UPLOAD_LOCAL_DIR: z.string().trim().min(1).default('uploads'),
   UPLOAD_MAX_FILE_SIZE_MB: numeric(z.coerce.number().positive().default(10)),
   AWS_S3_BUCKET: z.string().optional(),
-  AWS_REGION: z.string().optional(),
-  AWS_ACCESS_KEY_ID: z.string().optional(),
-  AWS_SECRET_ACCESS_KEY: z.string().optional(),
+  AWS_REGION: z.string().trim().default('us-east-1'),
+  AWS_ACCESS_KEY_ID: z.string().trim().default(''),
+  AWS_SECRET_ACCESS_KEY: z.string().trim().default(''),
   AWS_S3_SIGNED_URL_EXPIRES_SECONDS: numeric(z.coerce.number().int().min(1).default(3600)),
 
   // ── Redis ──────────────────────────────────────────────────────────────────
@@ -278,23 +318,16 @@ const envSchema = z.object({
   PROFILE_PICTURE_HEIGHT: z.string().optional(),
   PROFILE_PICTURE_QUALITY: z.string().optional(),
 
-  // ── Uploads / evidence storage ─────────────────────────────────────────────
-  APP_BASE_URL: z.string().trim().default('http://localhost:3000'),
-  UPLOAD_MAX_FILE_SIZE_MB: z.coerce.number().int().min(1).max(100).default(10),
-  AWS_REGION: z.string().trim().default('us-east-1'),
-  AWS_ACCESS_KEY_ID: z.string().trim().default(''),
-  AWS_SECRET_ACCESS_KEY: z.string().trim().default(''),
-  AWS_S3_SIGNED_URL_EXPIRES_SECONDS: z.coerce.number().int().min(1).default(900),
-
   // ── Indexer lag monitoring ─────────────────────────────────────────────────
-  INDEXER_LAG_ALERT_THRESHOLD: z.coerce.number().int().min(1).default(100),
-  INDEXER_LAG_CHECK_INTERVAL_MS: z.coerce.number().int().min(1000).default(60000),
+  INDEXER_LAG_ALERT_THRESHOLD: numeric(z.coerce.number().int().min(1).default(100)),
+  INDEXER_LAG_CHECK_INTERVAL_MS: numeric(z.coerce.number().int().min(1000).default(60000)),
   INDEXER_LAG_WEBHOOK_URL: z.string().trim().default(''),
 
   // ── Soroban RPC retry config ────────────────────────────────────────────────
   SOROBAN_RPC_MAX_RETRIES: z.coerce.number().int().min(1).max(20).default(3),
   SOROBAN_RPC_RETRY_BASE_MS: z.coerce.number().int().min(50).default(250),
   SOROBAN_RPC_RETRY_MAX_MS: z.coerce.number().int().min(500).default(8000),
+  SOROBAN_RPC_RETRY_JITTER_RATIO: z.coerce.number().min(0).max(1).default(0.2),
   STELLAR_BAD_SEQ_MAX_RETRIES: z.coerce.number().int().min(1).max(10).default(3),
 
   // ── Push notifications (Firebase Cloud Messaging) ───────────────────────────
@@ -316,6 +349,8 @@ const envSchema = z.object({
   SOCKET_PING_TIMEOUT_MS: z.coerce.number().int().min(1000).default(20000),
   SOCKET_MAX_MISSED_PONGS: z.coerce.number().int().min(1).max(10).default(2),
   SOCKET_MESSAGE_ACK_TIMEOUT_MS: z.coerce.number().int().min(1000).default(15000),
+  SOCKET_MESSAGE_QUEUE_MAX: z.coerce.number().int().min(1).default(100),
+  SOCKET_MESSAGE_MAX_RETRIES: z.coerce.number().int().min(0).max(20).default(5),
   SOCKET_TOKEN_CHECK_INTERVAL_MS: z.coerce.number().int().min(1000).default(60000),
   SOCKET_TOKEN_GRACE_PERIOD_MS: z.coerce.number().int().min(0).default(30000),
   SYNC_BATCH_SIZE_LIMIT: z.coerce.number().int().min(1).max(10000).default(500),
@@ -330,8 +365,8 @@ const envSchema = z.object({
   DRIVER_LOCATION_STALE_AFTER_SECONDS: z.coerce.number().int().min(1).default(300),
 
   // ── ETA cache / routing ──────────────────────────────────────
-  ETA_CACHE_TTL_SECONDS: z.coerce.number().int().min(1).default(600),
-  ETA_GEOHASH_PRECISION: z.coerce.number().int().min(1).max(12).default(7),
+  ETA_CACHE_TTL_SECONDS: numeric(z.coerce.number().int().min(1).default(600)),
+  ETA_GEOHASH_PRECISION: numeric(z.coerce.number().int().min(1).max(12).default(7)),
   GOOGLE_MAPS_API_KEY: z.string().default(''),
   OPENWEATHER_API_KEY: z.string().default(''),
 
@@ -339,6 +374,7 @@ const envSchema = z.object({
   SHUTDOWN_TIMEOUT_MS: z.coerce.number().int().min(1000).default(30000),
   ESCROW_MONITOR_CRON: z.string().trim().min(1).default('*/5 * * * *'),
   ESCROW_LOCK_TTL_SECONDS: z.coerce.number().int().min(1).default(86400),
+  ESCROW_FUNDING_WINDOW_SECONDS: z.coerce.number().int().min(1).default(86400),
 
   // ── Stellar / Soroban network ─────────────────────────────────
   STELLAR_NETWORK: z
@@ -355,27 +391,9 @@ const envSchema = z.object({
   STELLAR_BASE_FEE: numeric(z.coerce.number().int().min(1).default(100)),
   STELLAR_TRANSACTION_TIMEOUT_SECONDS: numeric(z.coerce.number().int().min(1).default(300)),
 
-  // ── Circuit breakers (Soroban RPC) ─────────────────────────────────────────
-  CB_SOROBAN_ERROR_THRESHOLD_PERCENTAGE: numeric(z.coerce.number().min(1).max(100).default(50)),
-  CB_SOROBAN_ROLLING_WINDOW_MS: numeric(z.coerce.number().int().min(1000).default(30000)),
-  CB_SOROBAN_RESET_TIMEOUT_MS: numeric(z.coerce.number().int().min(1000).default(60000)),
-  CB_SOROBAN_VOLUME_THRESHOLD: numeric(z.coerce.number().int().min(0).default(5)),
-  CB_SOROBAN_TIMEOUT_MS: numeric(z.coerce.number().int().min(1).default(10000)),
-
-  // ── ETA cache / routing ───────────────────────────────────────────────────
-  ETA_CACHE_TTL_SECONDS: numeric(z.coerce.number().int().min(1).default(600)),
-  ETA_GEOHASH_PRECISION: numeric(z.coerce.number().int().min(1).max(12).default(7)),
-  GOOGLE_MAPS_API_KEY: z.string().optional(),
-
-  // ── Indexer lag monitor ────────────────────────────────────────────────────
-  INDEXER_LAG_WEBHOOK_URL: z.string().default(''),
-  INDEXER_LAG_ALERT_THRESHOLD: numeric(z.coerce.number().int().min(1).default(100)),
-  INDEXER_LAG_CHECK_INTERVAL_MS: numeric(z.coerce.number().int().min(1000).default(60000)),
-
   // ── Escrow indexer ─────────────────────────────────────────────────────────
   ESCROW_CONTRACT_ID: z.string().trim().default(''),
   ESCROW_FUNDED_EVENT_TOPIC: z.string().trim().min(1).default('escrow_funded'),
-  ESCROW_MONITOR_CRON: z.string().trim().min(1).default('*/5 * * * *'),
 
   // ── Logging ───────────────────────────────────────────────────
   LOG_DIR: z.string().trim().min(1).default('logs'),
@@ -390,12 +408,12 @@ const envSchema = z.object({
     .default('false')
     .transform((value) => value === 'true'),
 
-  // ── Soroban circuit breaker ───────────────────────────────────
-  CB_SOROBAN_ERROR_THRESHOLD_PERCENTAGE: z.coerce.number().int().min(1).max(100).default(50),
-  CB_SOROBAN_ROLLING_WINDOW_MS: z.coerce.number().int().min(1000).default(10000),
-  CB_SOROBAN_RESET_TIMEOUT_MS: z.coerce.number().int().min(1000).default(30000),
-  CB_SOROBAN_VOLUME_THRESHOLD: z.coerce.number().int().min(1).default(5),
-  CB_SOROBAN_TIMEOUT_MS: z.coerce.number().int().min(1000).default(10000),
+  // ── Circuit breakers (Soroban RPC) ─────────────────────────────────────────
+  CB_SOROBAN_ERROR_THRESHOLD_PERCENTAGE: numeric(z.coerce.number().min(1).max(100).default(50)),
+  CB_SOROBAN_ROLLING_WINDOW_MS: numeric(z.coerce.number().int().min(1000).default(30000)),
+  CB_SOROBAN_RESET_TIMEOUT_MS: numeric(z.coerce.number().int().min(1000).default(60000)),
+  CB_SOROBAN_VOLUME_THRESHOLD: numeric(z.coerce.number().int().min(0).default(5)),
+  CB_SOROBAN_TIMEOUT_MS: numeric(z.coerce.number().int().min(1).default(10000)),
 
   // ── Merchant webhooks ───────────────────────────────────────────
   WEBHOOK_REQUEST_TIMEOUT_MS: z.coerce.number().int().min(1000).default(10000),
@@ -404,6 +422,14 @@ const envSchema = z.object({
   WEBHOOK_RETRY_MAX_MS: z.coerce.number().int().min(1000).default(3600000),
   WEBHOOK_RETRY_CRON: z.string().trim().min(1).default('* * * * *'),
   WEBHOOK_RETRY_BATCH_SIZE: z.coerce.number().int().min(1).max(500).default(50),
+  WEBHOOK_BATCH_FLUSH_WINDOW_MS: z.coerce.number().int().min(50).default(1000),
+
+  // ── Indexer event retries ─────────────────────────────────────────
+  EVENTLOG_RETRY_MAX_ATTEMPTS: z.coerce.number().int().min(1).max(20).default(5),
+  EVENTLOG_RETRY_BASE_MS: z.coerce.number().int().min(1000).default(60000),
+  EVENTLOG_RETRY_MAX_MS: z.coerce.number().int().min(1000).default(3600000),
+  EVENTLOG_RETRY_CRON: z.string().trim().min(1).default('* * * * *'),
+  EVENTLOG_RETRY_BATCH_SIZE: z.coerce.number().int().min(1).max(500).default(25),
 
   // ── Driver assignment ────────────────────────────────────────────
   ASSIGNMENT_RADIUS_EXPANSION_STEPS: z.coerce.number().int().min(0).max(10).default(3),
@@ -412,8 +438,16 @@ const envSchema = z.object({
   // ── Driver rating & penalties ─────────────────────────────────────
   DRIVER_RATING_CRON: z.string().trim().min(1).default('0 * * * *'),
 
+  // ── Merchant onboarding ──────────────────────────────────────────
+  ONBOARDING_CHALLENGE_TTL_SECONDS: z.coerce.number().int().min(60).max(86400).default(900),
+  ONBOARDING_MAX_PROOF_ATTEMPTS: z.coerce.number().int().min(1).max(20).default(5),
+
   // ── Proof of delivery ────────────────────────────────────────────
   PROOF_OF_DELIVERY_MAX_SIZE_MB: z.coerce.number().int().min(1).default(8),
+
+  // ── Admin dashboard ──────────────────────────────────────────────
+  /** TTL (s) of the Redis cache for aggregated admin dashboard metrics. Default: 60 */
+  ADMIN_DASHBOARD_CACHE_TTL_SECONDS: numeric(z.coerce.number().int().min(1).max(86400).default(60)),
 });
 
 let env: EnvConfig;
@@ -449,6 +483,11 @@ if (env.SOROBAN_RPC_RETRY_BASE_MS > env.SOROBAN_RPC_RETRY_MAX_MS) {
 
 if (env.WEBHOOK_RETRY_BASE_MS > env.WEBHOOK_RETRY_MAX_MS) {
   console.error('❌ WEBHOOK_RETRY_BASE_MS cannot exceed WEBHOOK_RETRY_MAX_MS');
+  process.exit(1);
+}
+
+if (env.EVENTLOG_RETRY_BASE_MS > env.EVENTLOG_RETRY_MAX_MS) {
+  console.error('❌ EVENTLOG_RETRY_BASE_MS cannot exceed EVENTLOG_RETRY_MAX_MS');
   process.exit(1);
 }
 

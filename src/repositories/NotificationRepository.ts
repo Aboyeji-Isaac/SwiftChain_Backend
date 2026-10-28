@@ -1,4 +1,4 @@
-import { Types } from 'mongoose';
+import { Types, FilterQuery, SortOrder } from 'mongoose';
 import Notification, { INotification } from '../models/Notification';
 import { BaseRepository } from './BaseRepository';
 import { Page } from './types';
@@ -17,11 +17,13 @@ export class NotificationRepository extends BaseRepository<INotification> {
 
   /** One page of a user's notification history, newest first. */
   async listForUser(
-    userId: string | Types.ObjectId,
+    _userId: string | Types.ObjectId,
+    filter: FilterQuery<INotification>,
     page: number,
     limit: number,
+    sort: Record<string, SortOrder> = { createdAt: -1 },
   ): Promise<Page<INotification>> {
-    return this.paginate({ user: userId }, page, limit, { sort: { createdAt: -1 } });
+    return this.paginate(filter, page, limit, { sort });
   }
 
   /** Every notification recorded for a delivery, newest first. */

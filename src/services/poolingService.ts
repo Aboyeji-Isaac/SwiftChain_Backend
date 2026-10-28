@@ -8,15 +8,13 @@
  * Delivery / DriverLocation models. All data is read from MongoDB.
  */
 
-import { StatusCodes } from 'http-status-codes';
-import { Types } from 'mongoose';
 import Delivery, { IDelivery, DeliveryStatus } from '../models/Delivery';
 import { DriverLocation } from '../models/DriverLocation';
 import { driverLocationService, NearbyDriver } from './driverLocationService';
 import { deliveryService } from './delivery.service';
 import { routingService } from './routingService';
+import type { IRoutingProvider } from './providers/routingProvider';
 import { encodeGeohash } from '../utils/geohash';
-import AppError from '../utils/AppError';
 import logger from '../config/logger';
 import env from '../config/env';
 import { isEnabled } from '../config/flags';
@@ -66,8 +64,14 @@ export interface AssignPoolResult {
 // ─── Service ──────────────────────────────────────────────────────────────────
 
 export class PoolingService {
+  private readonly routing: IRoutingProvider;
+
   private readonly DEFAULT_PROXIMITY_M = 2000;
   private readonly DEFAULT_MAX_POOL_SIZE = 5;
+
+  constructor(routing: IRoutingProvider = routingService) {
+    this.routing = routing;
+  }
 
   /**
    * Find pending/funded deliveries and group them into proximity-based pools.
@@ -92,9 +96,7 @@ export class PoolingService {
 
     // Optional geographic window
     if (options.center) {
-      const deg = options.radiusMeters
-        ? options.radiusMeters / 111_320
-        : 0.05; // ~5.5 km default
+      const deg = options.radiusMeters ? options.radiusMeters / 111_320 : 0.05; // ~5.5 km default
       filter['pickupCoordinates.lat'] = {
         $gte: options.center.lat - deg,
         $lte: options.center.lat + deg,
@@ -254,9 +256,7 @@ export class PoolingService {
   // ── Private helpers ────────────────────────────────────────────────────────
 
   private async buildPool(deliveries: IDelivery[]): Promise<DeliveryPool> {
-    const centroid = this.calculateCentroid(
-      deliveries.map((d) => d.pickupCoordinates!),
-    );
+    const centroid = this.calculateCentroid(deliveries.map((d) => d.pickupCoordinates!));
 
     const routeSequence = this.buildNearestNeighbourRoute(deliveries);
 
@@ -266,7 +266,7 @@ export class PoolingService {
     for (let i = 0; i < routeSequence.length - 1; i++) {
       const from = routeSequence[i].coordinates;
       const to = routeSequence[i + 1].coordinates;
-      const eta = await routingService.calculateETA({
+      const eta = await this.routing.calculateETA({
         pickup: from,
         dropoff: to,
         travelMode: 'driving',
@@ -287,10 +287,10 @@ export class PoolingService {
 
   private calculateCentroid(points: Coordinates[]): Coordinates {
     const n = points.length;
-    const sum = points.reduce(
-      (acc, p) => ({ lat: acc.lat + p.lat, lng: acc.lng + p.lng }),
-      { lat: 0, lng: 0 },
-    );
+    const sum = points.reduce((acc, p) => ({ lat: acc.lat + p.lat, lng: acc.lng + p.lng }), {
+      lat: 0,
+      lng: 0,
+    });
     return { lat: sum.lat / n, lng: sum.lng / n };
   }
 
@@ -332,9 +332,7 @@ export class PoolingService {
         // Cannot drop off before picking up the same delivery
         if (
           remaining[i].type === 'dropoff' &&
-          !sequence.some(
-            (s) => s.deliveryId === remaining[i].deliveryId && s.type === 'pickup',
-          )
+          !sequence.some((s) => s.deliveryId === remaining[i].deliveryId && s.type === 'pickup')
         ) {
           continue;
         }
@@ -366,9 +364,7 @@ export class PoolingService {
     const lat1 = toRad(a.lat);
     const lat2 = toRad(b.lat);
 
-    const h =
-      Math.sin(dLat / 2) ** 2 +
-      Math.cos(lat1) * Math.cos(lat2) * Math.sin(dLng / 2) ** 2;
+    const h = Math.sin(dLat / 2) ** 2 + Math.cos(lat1) * Math.cos(lat2) * Math.sin(dLng / 2) ** 2;
 
     return R * 2 * Math.atan2(Math.sqrt(h), Math.sqrt(1 - h));
   }

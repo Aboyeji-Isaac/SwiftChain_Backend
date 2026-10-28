@@ -13,12 +13,11 @@ import type {
   ResolveDisputeInput,
   AddEvidenceInput,
   UpdateDisputeInput,
-  DisputeFilter,
 } from '../validators/disputeValidator';
 import type { IUser } from '../interfaces/IUser';
 import AppError from '../utils/AppError';
-import { DisputeReason, DisputeStatus } from '../models/Dispute';
 import { sendSuccess } from '../utils/responseWrapper';
+import { resolveQueryOptions, buildPaginationMeta } from '../middlewares/queryMiddleware';
 
 // ─── POST /api/v1/disputes ──────────────────────────────────────
 
@@ -73,45 +72,15 @@ export const listDisputes = async (
   next: NextFunction,
 ): Promise<void> => {
   try {
-    const statusParam = req.query.status as string | undefined;
-    const status =
-      statusParam && Object.values(DisputeStatus).includes(statusParam as DisputeStatus)
-        ? (statusParam as DisputeStatus)
-        : undefined;
+    const { filter, page, limit, sort } = resolveQueryOptions(req);
 
-    const raisedBy = req.query.raisedBy as string | undefined;
-    const deliveryIdParam = req.query.deliveryId as string | undefined;
-
-    const reasonParam = req.query.reason as string | undefined;
-    const reason =
-      reasonParam && Object.values(DisputeReason).includes(reasonParam as DisputeReason)
-        ? (reasonParam as DisputeReason)
-        : undefined;
-
-    const page = req.query.page ? parseInt(req.query.page as string, 10) : 1;
-    const limit = req.query.limit ? parseInt(req.query.limit as string, 10) : 10;
-
-    const filters: DisputeFilter = {
-      status,
-      raisedBy,
-      deliveryId: deliveryIdParam,
-      reason,
-      page,
-      limit,
-    };
-
-    const result = await getDisputes(filters);
+    const result = await getDisputes({ filter, page, limit, sort });
 
     sendSuccess(
       res,
       {
         disputes: result.data,
-        meta: {
-          total: result.total,
-          page: result.page,
-          limit: result.limit,
-          totalPages: result.totalPages,
-        },
+        meta: buildPaginationMeta(result.total, result.page, result.limit),
       },
       'Disputes retrieved successfully',
       StatusCodes.OK,

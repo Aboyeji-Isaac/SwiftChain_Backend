@@ -139,7 +139,9 @@ and the delivery is set to `funded`.
 
 **Responses:** `201` created/recorded; `400` invalid body or database
 validation; `404` delivery not found; `409` same idempotency key still
-processing; `422` missing/invalid idempotency key; `500` unexpected failure.
+processing, or the delivery is cancelled because its escrow funding window
+lapsed (see below); `422` missing/invalid idempotency key; `500` unexpected
+failure.
 
 ```bash
 curl -i -X POST "$API_ORIGIN/api/v1/escrow/fund" \
@@ -155,6 +157,29 @@ curl -i -X POST "$API_ORIGIN/api/v1/escrow/fund" \
     "ledger":123456
   }'
 ```
+
+#### Funding window and automatic cancellation (issue #247)
+
+Deliveries created with a non-zero `escrowAmount` receive a funding deadline:
+`fundBy` is stamped at creation as `now + ESCROW_FUNDING_WINDOW_SECONDS`
+(default `86400` seconds = 24 hours). The escrow monitor cron job
+(`ESCROW_MONITOR_CRON`, default every 5 minutes) cancels any still-`pending`
+delivery whose `fundBy` has passed:
+
+- the delivery transitions to `cancelled` with `cancellationReason` set to the
+  lapsed-window reason;
+- the customer is notified of the `cancelled` status (webhooks and sockets
+  receive the same transition);
+- a `funding_window_lapsed` milestone is appended to the delivery event log;
+- an audit-log entry (`action: funding_window_lapsed`) is written.
+
+**Policy — reject, do not resurrect.** A funding event (fund endpoint or
+indexer sync) for a cancelled delivery is rejected with `409` and a clear
+message; the delivery must not be revived — create a new delivery to fund it.
+A fund request that arrives *after* `fundBy` but before the next monitor tick
+cancels the delivery inline first and then rejects with the same `409`, so the
+"FUNDED-pending limbo" state can never outlive a fund request. Funding while
+the window is still open behaves exactly as before.
 
 ### Get Escrow by Delivery
 

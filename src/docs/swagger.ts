@@ -58,6 +58,9 @@ const swaggerDefinition: swaggerJSDoc.SwaggerDefinition = {
     { name: 'Transactions', description: 'Soroban transaction building and submission' },
     { name: 'Uploads', description: 'Evidence and media uploads' },
     { name: 'Admin', description: 'Administrative dashboards, disputes and DLQ management' },
+    { name: 'Chat', description: 'Delivery chat history, unread counts, and read tracking' },
+    { name: 'Delivery Events', description: 'Delivery milestone lifecycle event stream' },
+    { name: 'Pooling', description: 'Delivery pooling and route batch optimization' },
   ],
   components: {
     securitySchemes: {
@@ -113,11 +116,14 @@ const routesDir = path.join(__dirname, '..', 'routes');
  */
 const annotatedRouteFiles = [
   'authRoutes',
+  'chatRoutes',
   'delivery.routes',
   'deliveries',
+  'deliveryEventRoutes',
   'driverRoutes',
   'adminRoutes',
   'escrow.routes',
+  'escrowAdminRoutes',
   'escrowIndexer.routes',
   'indexer.routes',
   'healthRoutes',

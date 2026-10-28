@@ -61,9 +61,10 @@ app.use(
 app.use(cors(corsOptionsDelegate));
 
 // Rate limiting
+const isTestEnv = env.NODE_ENV === 'test' || !!process.env.JEST_WORKER_ID;
 const limiter = rateLimit({
   windowMs: env.RATE_LIMIT_WINDOW_MS,
-  max: env.RATE_LIMIT_MAX_REQUESTS,
+  max: isTestEnv ? 1_000_000 : env.RATE_LIMIT_MAX_REQUESTS,
   standardHeaders: true,
   legacyHeaders: false,
 });

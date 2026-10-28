@@ -3,6 +3,7 @@ import authenticate from '../middleware/authenticate';
 import requireRole from '../middleware/requireRole';
 import validate from '../middleware/validate';
 import { UserRole } from '../interfaces/IUser';
+import { buildQueryOptions } from '../middlewares/queryMiddleware';
 import {
   openDispute,
   getDispute,
@@ -33,7 +34,23 @@ router.post('/', authenticate, validate({ body: createDisputeSchema }), openDisp
  * @access  Admin only — the query is not scoped to the caller, so exposing it
  *          to every authenticated user would leak other users' disputes.
  */
-router.get('/', authenticate, requireRole(UserRole.ADMIN), listDisputes);
+router.get(
+  '/',
+  authenticate,
+  requireRole(UserRole.ADMIN),
+  buildQueryOptions({
+    sortableFields: ['createdAt'],
+    filterableFields: {
+      status: 'string',
+      reason: 'string',
+      raisedBy: 'string',
+      deliveryId: 'string',
+    },
+    defaultSort: { createdAt: -1 },
+    defaultLimit: 10,
+  }),
+  listDisputes,
+);
 
 /**
  * @route   GET /api/v1/disputes/:id

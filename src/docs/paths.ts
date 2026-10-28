@@ -225,6 +225,172 @@ export const paths: swaggerJSDoc.Paths = {
       },
     },
   },
+  '/v1/deliveries/fee-estimate': {
+    post: {
+      tags: ['Deliveries'],
+      summary: 'Calculate live delivery fee estimate',
+      description:
+        'Calculates dynamic fee estimate based on pickup/dropoff locations and distance.',
+      security: bearer,
+      requestBody: {
+        required: true,
+        content: {
+          'application/json': {
+            schema: {
+              type: 'object',
+              required: ['pickupAddress', 'deliveryAddress'],
+              properties: {
+                pickupAddress: { type: 'string' },
+                deliveryAddress: { type: 'string' },
+                packageWeight: { type: 'number' },
+              },
+            },
+          },
+        },
+      },
+      responses: {
+        200: { description: 'Fee estimate calculated successfully' },
+        400: { $ref: '#/components/responses/ValidationError' },
+        401: { $ref: '#/components/responses/Unauthorized' },
+      },
+    },
+  },
+  '/v1/deliveries/{id}/messages/unread': {
+    get: {
+      tags: ['Chat'],
+      summary: 'Get unread message count for a delivery',
+      description:
+        'Returns the number of unread messages in a delivery for the authenticated user.',
+      security: bearer,
+      parameters: [{ in: 'path', name: 'id', required: true, schema: { type: 'string' } }],
+      responses: {
+        200: {
+          description: 'Unread message count',
+          content: {
+            'application/json': {
+              schema: {
+                type: 'object',
+                properties: {
+                  success: { type: 'boolean', example: true },
+                  data: {
+                    type: 'object',
+                    properties: {
+                      unreadCount: { type: 'integer', example: 3 },
+                      count: { type: 'integer', example: 3 },
+                    },
+                  },
+                },
+              },
+            },
+          },
+        },
+        401: { $ref: '#/components/responses/Unauthorized' },
+        403: { $ref: '#/components/responses/Forbidden' },
+        404: { $ref: '#/components/responses/NotFound' },
+      },
+    },
+  },
+  '/v1/deliveries/{id}/messages/unread-count': {
+    get: {
+      tags: ['Chat'],
+      summary: 'Get unread message count alias for a delivery',
+      description: 'Alias for /v1/deliveries/:id/messages/unread.',
+      security: bearer,
+      parameters: [{ in: 'path', name: 'id', required: true, schema: { type: 'string' } }],
+      responses: {
+        200: {
+          description: 'Unread message count',
+          content: {
+            'application/json': {
+              schema: {
+                type: 'object',
+                properties: {
+                  success: { type: 'boolean', example: true },
+                  data: {
+                    type: 'object',
+                    properties: {
+                      unreadCount: { type: 'integer', example: 3 },
+                      count: { type: 'integer', example: 3 },
+                    },
+                  },
+                },
+              },
+            },
+          },
+        },
+        401: { $ref: '#/components/responses/Unauthorized' },
+        403: { $ref: '#/components/responses/Forbidden' },
+        404: { $ref: '#/components/responses/NotFound' },
+      },
+    },
+  },
+  '/v1/deliveries/{id}/messages/read': {
+    patch: {
+      tags: ['Chat'],
+      summary: 'Mark all unread messages as read',
+      description:
+        'Marks all unread messages in the delivery conversation as read by the authenticated user.',
+      security: bearer,
+      parameters: [{ in: 'path', name: 'id', required: true, schema: { type: 'string' } }],
+      responses: {
+        200: {
+          description: 'Messages marked as read',
+          content: {
+            'application/json': {
+              schema: {
+                type: 'object',
+                properties: {
+                  success: { type: 'boolean', example: true },
+                  data: {
+                    type: 'object',
+                    properties: {
+                      modifiedCount: { type: 'integer', example: 3 },
+                    },
+                  },
+                },
+              },
+            },
+          },
+        },
+        401: { $ref: '#/components/responses/Unauthorized' },
+        403: { $ref: '#/components/responses/Forbidden' },
+        404: { $ref: '#/components/responses/NotFound' },
+      },
+    },
+  },
+  '/v1/deliveries/{id}/messages/mark-read': {
+    patch: {
+      tags: ['Chat'],
+      summary: 'Mark unread messages as read (alias)',
+      description: 'Alias for /v1/deliveries/:id/messages/read.',
+      security: bearer,
+      parameters: [{ in: 'path', name: 'id', required: true, schema: { type: 'string' } }],
+      responses: {
+        200: {
+          description: 'Messages marked as read',
+          content: {
+            'application/json': {
+              schema: {
+                type: 'object',
+                properties: {
+                  success: { type: 'boolean', example: true },
+                  data: {
+                    type: 'object',
+                    properties: {
+                      modifiedCount: { type: 'integer', example: 3 },
+                    },
+                  },
+                },
+              },
+            },
+          },
+        },
+        401: { $ref: '#/components/responses/Unauthorized' },
+        403: { $ref: '#/components/responses/Forbidden' },
+        404: { $ref: '#/components/responses/NotFound' },
+      },
+    },
+  },
 
   // ─── Escrow ─────────────────────────────────────────────────────────────────
   '/v1/escrow/delivery/{deliveryId}': {
@@ -1827,6 +1993,66 @@ export const paths: swaggerJSDoc.Paths = {
         400: { $ref: '#/components/responses/ValidationError' },
         404: { $ref: '#/components/responses/NotFound' },
         503: { description: 'Escrow contract not configured' },
+      },
+    },
+  },
+
+  // ─── Pooling ─────────────────────────────────────────────────────────────────
+  '/v1/pooling/create': {
+    post: {
+      tags: ['Pooling'],
+      summary: 'Create a delivery pool',
+      description: 'Creates a pooled route from multiple eligible deliveries.',
+      security: bearer,
+      requestBody: {
+        required: true,
+        content: {
+          'application/json': {
+            schema: {
+              type: 'object',
+              required: ['deliveryIds'],
+              properties: {
+                deliveryIds: {
+                  type: 'array',
+                  items: { type: 'string' },
+                },
+              },
+            },
+          },
+        },
+      },
+      responses: {
+        201: { description: 'Delivery pool created successfully' },
+        400: { $ref: '#/components/responses/ValidationError' },
+        401: { $ref: '#/components/responses/Unauthorized' },
+      },
+    },
+  },
+  '/v1/pooling/assign': {
+    post: {
+      tags: ['Pooling'],
+      summary: 'Assign a delivery pool to a driver',
+      description: 'Assigns an optimized pool of deliveries to a driver.',
+      security: bearer,
+      requestBody: {
+        required: true,
+        content: {
+          'application/json': {
+            schema: {
+              type: 'object',
+              required: ['poolId', 'driverId'],
+              properties: {
+                poolId: { type: 'string' },
+                driverId: { type: 'string' },
+              },
+            },
+          },
+        },
+      },
+      responses: {
+        200: { description: 'Pool assigned successfully' },
+        400: { $ref: '#/components/responses/ValidationError' },
+        401: { $ref: '#/components/responses/Unauthorized' },
       },
     },
   },

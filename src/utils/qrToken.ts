@@ -55,7 +55,7 @@ export function verifyQrToken(token: string): { deliveryId: string } {
   }
 
   // Check expiry
-  if (Date.now() > decoded.expiresAt) {
+  if (Date.now() >= decoded.expiresAt) {
     throw new Error('QR token has expired');
   }
 

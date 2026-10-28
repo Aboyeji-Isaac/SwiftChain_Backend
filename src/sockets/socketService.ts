@@ -67,7 +67,12 @@ export class SocketService {
 
     try {
       const message = await this.chat.createMessage(payload);
-      nsp.emit('message', message);
+      if (message.deliveryId && typeof nsp.to === 'function') {
+        const room = deliveryRoom(String(message.deliveryId));
+        nsp.to(room).to(String(message.deliveryId)).emit('message', message);
+      } else {
+        nsp.emit('message', message);
+      }
     } catch (error) {
       if (error instanceof ChatFeatureDisabledError) {
         socket?.emit('error', { message: 'Chat is disabled' });

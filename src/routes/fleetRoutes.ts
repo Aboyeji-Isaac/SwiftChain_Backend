@@ -14,6 +14,18 @@ import {
   removeMember,
 } from '../controllers/fleetController';
 import { UserRole } from '../interfaces/IUser';
+import { buildQueryOptions } from '../middlewares/queryMiddleware';
+
+/** Shared query contract for the fleet list endpoint (docs/query-contract.md). */
+const fleetListQuery = buildQueryOptions({
+  sortableFields: ['createdAt', 'name'],
+  filterableFields: {
+    isActive: 'boolean',
+  },
+  searchableFields: ['name'],
+  defaultSort: { createdAt: -1 },
+  defaultLimit: 10,
+});
 
 const router = Router();
 
@@ -32,7 +44,7 @@ router.post('/', requireRole(UserRole.ENTERPRISE), createFleet);
  * @desc    Get all fleets (paginated)
  * @access  Enterprise/Admin
  */
-router.get('/', requireRole(UserRole.ENTERPRISE), getAllFleets);
+router.get('/', requireRole(UserRole.ENTERPRISE), fleetListQuery, getAllFleets);
 
 /**
  * @route   GET /api/v1/fleets/:id

@@ -4,7 +4,7 @@ import requireRole from '../middleware/requireRole';
 import { suspendUser, getDisputes } from '../controllers/adminController';
 import { getDashboardMetrics } from '../controllers/dashboardController';
 import { dlqController } from '../controllers/dlqController';
-import { listFlaggedEscrows, resolveFlaggedEscrow } from '../controllers/escrowController';
+import eventLogController from '../controllers/eventLogController';
 import { UserRole } from '../interfaces/IUser';
 
 const router = Router();
@@ -268,11 +268,15 @@ router.post('/dlq/:id/retry', dlqController.retryDlqEntry);
 
 /**
  * @openapi
- * /v1/admin/escrows/flagged:
+ * /v1/admin/eventlog/failed:
  *   get:
  *     tags: [Admin]
- *     summary: List escrows flagged as expired for admin review
- *     description: Admin-only. Returns a paginated list of escrows whose lock TTL elapsed.
+ *     summary: List failed indexer events with their retry state
+ *     description: >
+ *       Admin-only. Returns EventLog entries in the `failed` status, newest failure
+ *       first, including `retries`, `lastError`, `nextRetryAt` and `deadLetteredAt`.
+ *       Entries with `deadLetteredAt` set have exhausted their retries and were sent
+ *       to the DLQ; the retry job no longer picks them up.
  *     security:
  *       - bearerAuth: []
  *     parameters:
@@ -280,25 +284,35 @@ router.post('/dlq/:id/retry', dlqController.retryDlqEntry);
  *         name: page
  *         schema:
  *           type: integer
- *         description: 1-based page number (default 1)
+ *           default: 1
  *       - in: query
  *         name: limit
  *         schema:
  *           type: integer
- *         description: Items per page (default 20, max 100)
+ *           default: 20
+ *         description: Items per page (max 100)
  *     responses:
  *       200:
- *         description: Paginated list of flagged (expired) escrows
+ *         description: Failed events retrieved
+ *       401:
+ *         $ref: '#/components/responses/Unauthorized'
+ *       403:
+ *         description: Requester is not an admin
  */
-router.get('/escrows/flagged', listFlaggedEscrows);
+router.get('/eventlog/failed', eventLogController.getFailedEvents.bind(eventLogController));
 
 /**
  * @openapi
- * /v1/admin/escrows/{id}/resolve:
- *   patch:
+ * /v1/admin/eventlog/{id}/retry:
+ *   post:
  *     tags: [Admin]
- *     summary: Resolve a flagged (expired) escrow
- *     description: Admin-only. Marks a flagged escrow as resolved and records the audit trail.
+ *     summary: Retry a failed indexer event now
+ *     description: >
+ *       Admin-only and audit-logged. Re-runs the event through the event poller's
+ *       dispatch path, ignoring its backoff window. `outcome` is `processed` on
+ *       success, `scheduled` when it failed with attempts left, or `dead_lettered`
+ *       when retries are exhausted and the event was escalated to the DLQ.
+ *       Dead-lettered entries can be retried here as well.
  *     security:
  *       - bearerAuth: []
  *     parameters:
@@ -307,27 +321,22 @@ router.get('/escrows/flagged', listFlaggedEscrows);
  *         required: true
  *         schema:
  *           type: string
- *     requestBody:
- *       required: true
- *       content:
- *         application/json:
- *           schema:
- *             type: object
- *             required: [notes]
- *             properties:
- *               notes:
- *                 type: string
- *                 description: Audit trail description of the resolution
  *     responses:
  *       200:
- *         description: Escrow has been resolved successfully
+ *         description: Retry attempted; see `outcome`
  *       400:
- *         description: Missing or invalid notes / escrow id
+ *         description: Invalid event log id
+ *       401:
+ *         $ref: '#/components/responses/Unauthorized'
+ *       403:
+ *         description: Requester is not an admin
  *       404:
- *         description: Escrow not found
+ *         $ref: '#/components/responses/NotFound'
  *       409:
- *         description: Escrow is not in the expired state
+ *         description: Entry is not failed, or is already being retried
+ *       503:
+ *         description: No escrow contract is configured to replay against
  */
-router.patch('/escrows/:id/resolve', resolveFlaggedEscrow);
+router.post('/eventlog/:id/retry', eventLogController.retryFailedEvent.bind(eventLogController));
 
 export default router;

@@ -2,7 +2,6 @@ import mongoose, { Schema } from 'mongoose';
 import bcrypt from 'bcryptjs';
 import env from '../config/env';
 import { IUser, UserRole, UserStatus } from '../interfaces/IUser';
-import env from '../config/env';
 
 const userSchema = new Schema<IUser>(
   {

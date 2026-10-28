@@ -11,6 +11,10 @@ import mongoose from 'mongoose';
 import Fleet from '../models/Fleet';
 import User from '../models/User';
 import { sendSuccess } from '../utils/responseWrapper';
+import { resolveQueryOptions, buildPaginationMeta } from '../middlewares/queryMiddleware';
+
+/** Stellar public-key format required for fleet treasury addresses (docs/fleet.md). */
+const STELLAR_PUBLIC_KEY_PATTERN = /^G[A-Z0-9]{55}$/;
 
 // ─── Request body types ────────────────────────────────────────────────────────
 
@@ -71,13 +75,26 @@ export const createFleet = async (
       throw new AppError('Treasury address is required.', StatusCodes.BAD_REQUEST);
     }
 
+    const normalizedTreasury = treasuryAddress.trim();
+    if (!STELLAR_PUBLIC_KEY_PATTERN.test(normalizedTreasury)) {
+      throw new AppError(
+        'Treasury address must be a valid Stellar public key.',
+        StatusCodes.BAD_REQUEST,
+      );
+    }
+
     if (!businessMetadata || typeof businessMetadata !== 'object') {
       throw new AppError('Business metadata is required.', StatusCodes.BAD_REQUEST);
     }
 
+    const duplicateName = await Fleet.exists({ ownerId: owner._id, name: name.trim() });
+    if (duplicateName) {
+      throw new AppError('You already have a fleet with this name.', StatusCodes.CONFLICT);
+    }
+
     const fleet = await Fleet.create({
       name: name.trim(),
-      treasuryAddress: (treasuryAddress as string).trim(),
+      treasuryAddress: normalizedTreasury,
       ownerId: owner._id,
       members: [{ userId: owner._id, role: 'admin', joinedAt: new Date() }],
       businessMetadata: {
@@ -207,29 +224,24 @@ export const getAllFleets = async (
       throw new AppError('Authentication required.', StatusCodes.UNAUTHORIZED);
     }
 
-    const page = parseInt(req.query.page as string) || 1;
-    const limit = parseInt(req.query.limit as string) || 10;
-    const skip = (page - 1) * limit;
+    const { filter, page, limit, sort } = resolveQueryOptions(req);
 
-    const fleets = await Fleet.find({ isActive: true })
-      .skip(skip)
-      .limit(limit)
-      .sort({ createdAt: -1 })
-      .populate('ownerId', 'name email')
-      .populate('members.userId', 'name email role');
-
-    const total = await Fleet.countDocuments({ isActive: true });
+    const query = { isActive: true, ...filter };
+    const [fleets, total] = await Promise.all([
+      Fleet.find(query)
+        .sort(sort)
+        .skip((page - 1) * limit)
+        .limit(limit)
+        .populate('ownerId', 'name email')
+        .populate('members.userId', 'name email role'),
+      Fleet.countDocuments(query),
+    ]);
 
     sendSuccess(
       res,
       {
         fleets,
-        pagination: {
-          page,
-          limit,
-          total,
-          pages: Math.ceil(total / limit),
-        },
+        meta: buildPaginationMeta(total, page, limit),
       },
       'Fleets retrieved successfully',
       StatusCodes.OK,

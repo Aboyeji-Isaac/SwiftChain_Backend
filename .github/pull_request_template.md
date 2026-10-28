@@ -80,6 +80,7 @@ curl http://localhost:3000/api/v1/disputes/<DISPUTE_ID>
 ## Checklist
 
 - [ ] Code follows repo conventions and lints
+- [ ] New files follow [the code conventions](../docs/code-conventions.md) and do not introduce duplicate legacy stacks
 - [ ] Unit/integration tests added for critical logic (could be added in follow-up)
 - [x] All existing tests pass
 - [x] PR references related issue: Closes #129

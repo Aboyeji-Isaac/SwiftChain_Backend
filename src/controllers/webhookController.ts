@@ -5,6 +5,7 @@ import type { RegisterWebhookInput, UpdateWebhookInput } from '../validators/web
 import type { IUser } from '../interfaces/IUser';
 import AppError from '../utils/AppError';
 import { sendSuccess } from '../utils/responseWrapper';
+import { resolveQueryOptions, buildPaginationMeta } from '../middlewares/queryMiddleware';
 
 function requireUser(req: Request): IUser {
   const user = (req as Request & { user?: IUser }).user;
@@ -28,6 +29,7 @@ export const registerWebhook = async (
       merchantId: user._id.toString(),
       url: req.body.url,
       events: req.body.events,
+      allowBatch: req.body.allowBatch,
       description: req.body.description,
     });
 
@@ -51,8 +53,19 @@ export const listWebhooks = async (
 ): Promise<void> => {
   try {
     const user = requireUser(req);
-    const webhooks = await webhookService.listForMerchant(user._id.toString());
-    sendSuccess(res, { webhooks }, 'Webhooks retrieved successfully', StatusCodes.OK);
+    const { filter, page, limit, sort } = resolveQueryOptions(req);
+    const result = await webhookService.listForMerchant(user._id.toString(), {
+      filter,
+      page,
+      limit,
+      sort,
+    });
+    sendSuccess(
+      res,
+      { webhooks: result.data, meta: buildPaginationMeta(result.total, result.page, result.limit) },
+      'Webhooks retrieved successfully',
+      StatusCodes.OK,
+    );
   } catch (error) {
     next(error);
   }

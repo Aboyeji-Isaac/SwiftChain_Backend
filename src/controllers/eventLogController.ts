@@ -1,8 +1,11 @@
 import { Request, Response, NextFunction } from 'express';
 import { StatusCodes } from 'http-status-codes';
 import eventLogService from '../services/eventLogService';
+import { eventLogRetryService } from '../services/eventLogRetryService';
 import { sendSuccess, sendError } from '../utils/responseWrapper';
 import logger from '../config/logger';
+import { resolveQueryOptions, buildPaginationMeta } from '../middlewares/queryMiddleware';
+import { IUser } from '../interfaces/IUser';
 
 export class EventLogController {
   /**
@@ -33,8 +36,17 @@ export class EventLogController {
    */
   async getUnprocessedEvents(req: Request, res: Response, next: NextFunction): Promise<void> {
     try {
-      const events = await eventLogService.getUnprocessedEvents();
-      sendSuccess(res, events, 'Unprocessed events retrieved successfully', StatusCodes.OK);
+      const { page, limit, sort } = resolveQueryOptions(req);
+      const result = await eventLogService.getUnprocessedEvents(page, limit, sort);
+      sendSuccess(
+        res,
+        {
+          events: result.data,
+          meta: buildPaginationMeta(result.total, result.page, result.limit),
+        },
+        'Unprocessed events retrieved successfully',
+        StatusCodes.OK,
+      );
     } catch (error) {
       logger.error('Error in getUnprocessedEvents:', error);
       next(error);
@@ -84,6 +96,52 @@ export class EventLogController {
       sendSuccess(res, event, 'Event retrieved successfully', StatusCodes.OK);
     } catch (error) {
       logger.error('Error in getEventByTransactionHash:', error);
+      next(error);
+    }
+  }
+
+  /**
+   * List failed events with their retry state
+   * GET /api/v1/admin/eventlog/failed
+   */
+  async getFailedEvents(req: Request, res: Response, next: NextFunction): Promise<void> {
+    try {
+      const page = parseInt(req.query.page as string, 10) || 1;
+      const limit = parseInt(req.query.limit as string, 10) || 20;
+      const result = await eventLogRetryService.listFailed(page, limit);
+      sendSuccess(
+        res,
+        {
+          events: result.data,
+          meta: buildPaginationMeta(result.total, result.page, result.limit),
+        },
+        'Failed events retrieved successfully',
+        StatusCodes.OK,
+      );
+    } catch (error) {
+      logger.error('Error in getFailedEvents:', error);
+      next(error);
+    }
+  }
+
+  /**
+   * Re-run a failed event through the poller's dispatch path now
+   * POST /api/v1/admin/eventlog/:id/retry
+   */
+  async retryFailedEvent(req: Request, res: Response, next: NextFunction): Promise<void> {
+    try {
+      const user = (req as Request & { user?: IUser }).user;
+      const actorId = user?._id ? String(user._id) : null;
+      const { outcome, event } = await eventLogRetryService.retryById(req.params.id, actorId);
+      const message =
+        outcome === 'processed'
+          ? 'Event retried and processed successfully'
+          : outcome === 'scheduled'
+            ? 'Event retry failed; another attempt has been scheduled'
+            : 'Event retry failed; retries are exhausted and the event was sent to the DLQ';
+      sendSuccess(res, { outcome, event }, message, StatusCodes.OK);
+    } catch (error) {
+      logger.error('Error in retryFailedEvent:', error);
       next(error);
     }
   }
