@@ -324,4 +324,170 @@ describe('WebhookService - Versioning and Batching (Issue #243)', () => {
       expect(mockedAxios.post).toHaveBeenCalledTimes(2);
     });
   });
+
+  describe('Webhook reliability coverage (issue #225)', () => {
+    const delivery = (status: DeliveryStatus = DeliveryStatus.COMPLETED): IDelivery =>
+      ({
+        _id: new Types.ObjectId(),
+        sender: new Types.ObjectId(merchantId),
+        trackingNumber: 'TRK-RELIABILITY',
+        status,
+        driverId: 'DRV-RELIABILITY',
+      }) as unknown as IDelivery;
+
+    it('does not dispatch events a subscription did not request', async () => {
+      const { webhook } = await webhookService.registerWebhook({
+        merchantId,
+        url: 'https://merchant.example.com/completed-only',
+        events: [WebhookEvent.DELIVERY_COMPLETED],
+      });
+
+      await webhookService.dispatchDeliveryEvent(
+        delivery(DeliveryStatus.IN_PROGRESS),
+        DeliveryStatus.IN_PROGRESS,
+      );
+
+      expect(mockedAxios.post).not.toHaveBeenCalled();
+      expect(await WebhookDeliveryAttempt.countDocuments({ webhook: webhook._id })).toBe(0);
+    });
+
+    it('rotates a signing secret and immediately rejects signatures made with the old secret', async () => {
+      const { webhook, secret: oldSecret } = await webhookService.registerWebhook({
+        merchantId,
+        url: 'https://merchant.example.com/rotate',
+        events: [WebhookEvent.DELIVERY_COMPLETED],
+      });
+      const body = JSON.stringify({ event: WebhookEvent.DELIVERY_COMPLETED });
+      const oldSignature = webhookService.sign(body, oldSecret);
+
+      const { secret: newSecret } = await webhookService.rotateSecret(
+        merchantId,
+        String(webhook._id),
+      );
+
+      expect(newSecret).not.toBe(oldSecret);
+      expect(webhookService.verifySignature(body, oldSignature, newSecret)).toBe(false);
+      expect(webhookService.verifySignature(body, oldSignature, 'another-wrong-secret')).toBe(
+        false,
+      );
+      expect(
+        webhookService.verifySignature(body, webhookService.sign(body, newSecret), newSecret),
+      ).toBe(true);
+    });
+
+    it('records HTTP failures and schedules a retry within the jitter bounds', async () => {
+      const { webhook } = await webhookService.registerWebhook({
+        merchantId,
+        url: 'https://merchant.example.com/retry',
+        events: [WebhookEvent.DELIVERY_COMPLETED],
+      });
+      const startedAt = Date.now();
+      const random = jest.spyOn(Math, 'random').mockReturnValue(0);
+      mockedAxios.post.mockRejectedValueOnce(
+        Object.assign(new Error('Service Unavailable'), {
+          isAxiosError: true,
+          response: { status: 503 },
+        }),
+      );
+
+      try {
+        await webhookService.dispatchDeliveryEvent(delivery(), DeliveryStatus.COMPLETED);
+      } finally {
+        random.mockRestore();
+      }
+
+      const attempt = await WebhookDeliveryAttempt.findOne({ webhook: webhook._id });
+      expect(attempt?.status).toBe(WebhookDeliveryStatus.FAILED);
+      expect(attempt?.attempts).toBe(1);
+      expect(attempt?.lastStatusCode).toBe(503);
+      expect(attempt?.lastError).toContain('Service Unavailable');
+      expect(attempt?.nextRetryAt).toBeDefined();
+      const retryDelay = attempt!.nextRetryAt!.getTime() - startedAt;
+      expect(retryDelay).toBeGreaterThanOrEqual(24_000);
+      expect(retryDelay).toBeLessThanOrEqual(30_100);
+    });
+
+    it('records network exceptions without an HTTP status code', async () => {
+      const { webhook } = await webhookService.registerWebhook({
+        merchantId,
+        url: 'https://merchant.example.com/offline',
+        events: [WebhookEvent.DELIVERY_COMPLETED],
+      });
+      mockedAxios.post.mockRejectedValueOnce(new Error('socket disconnected'));
+
+      await webhookService.dispatchDeliveryEvent(delivery(), DeliveryStatus.COMPLETED);
+
+      const attempt = await WebhookDeliveryAttempt.findOne({ webhook: webhook._id });
+      expect(attempt?.status).toBe(WebhookDeliveryStatus.FAILED);
+      expect(attempt?.lastError).toBe('socket disconnected');
+      expect(attempt?.lastStatusCode).toBeUndefined();
+      expect(attempt?.nextRetryAt).toBeInstanceOf(Date);
+    });
+
+    it('marks the attempt exhausted after its final allowed try', async () => {
+      const { webhook } = await webhookService.registerWebhook({
+        merchantId,
+        url: 'https://merchant.example.com/exhausted',
+        events: [WebhookEvent.DELIVERY_COMPLETED],
+      });
+      const subscription = await WebhookSubscription.findById(webhook._id).select('+secret');
+      const attempt = await WebhookDeliveryAttempt.create({
+        webhook: webhook._id,
+        merchantId: new Types.ObjectId(merchantId),
+        event: WebhookEvent.DELIVERY_COMPLETED,
+        delivery: new Types.ObjectId(),
+        payload: { event: WebhookEvent.DELIVERY_COMPLETED },
+        status: WebhookDeliveryStatus.PENDING,
+        attempts: 0,
+        maxAttempts: 1,
+      });
+      mockedAxios.post.mockRejectedValueOnce(new Error('connection refused'));
+
+      await webhookService.sendAttempt(attempt, subscription!);
+
+      expect(attempt.status).toBe(WebhookDeliveryStatus.EXHAUSTED);
+      expect(attempt.attempts).toBe(1);
+      expect(attempt.nextRetryAt).toBeNull();
+    });
+
+    it('retries only due failures and records successful retry completion', async () => {
+      const { webhook } = await webhookService.registerWebhook({
+        merchantId,
+        url: 'https://merchant.example.com/due-retry',
+        events: [WebhookEvent.DELIVERY_COMPLETED],
+      });
+      const dueAttempt = await WebhookDeliveryAttempt.create({
+        webhook: webhook._id,
+        merchantId: new Types.ObjectId(merchantId),
+        event: WebhookEvent.DELIVERY_COMPLETED,
+        delivery: new Types.ObjectId(),
+        payload: { event: WebhookEvent.DELIVERY_COMPLETED },
+        status: WebhookDeliveryStatus.FAILED,
+        attempts: 1,
+        maxAttempts: 3,
+        nextRetryAt: new Date(Date.now() - 1000),
+      });
+      await WebhookDeliveryAttempt.create({
+        webhook: webhook._id,
+        merchantId: new Types.ObjectId(merchantId),
+        event: WebhookEvent.DELIVERY_COMPLETED,
+        delivery: new Types.ObjectId(),
+        payload: { event: WebhookEvent.DELIVERY_COMPLETED },
+        status: WebhookDeliveryStatus.FAILED,
+        attempts: 1,
+        maxAttempts: 3,
+        nextRetryAt: new Date(Date.now() + 60_000),
+      });
+      mockedAxios.post.mockResolvedValueOnce({ status: 200, data: { ok: true } });
+
+      const processed = await webhookService.retryDueAttempts();
+      const retriedAttempt = await WebhookDeliveryAttempt.findById(dueAttempt._id);
+
+      expect(processed).toBe(1);
+      expect(mockedAxios.post).toHaveBeenCalledTimes(1);
+      expect(retriedAttempt?.status).toBe(WebhookDeliveryStatus.SUCCESS);
+      expect(retriedAttempt?.attempts).toBe(2);
+      expect(retriedAttempt?.nextRetryAt).toBeNull();
+    });
+  });
 });
